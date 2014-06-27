@@ -1,0 +1,3 @@
+en:
+  http_basic_authorization_email_suffix: "Email domain suffix"
+  http_basic_authorization_email_suffix_hint: "e.g. @neopoly.de"
