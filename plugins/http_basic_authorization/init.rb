@@ -10,6 +10,9 @@ Redmine::Plugin.register :http_basic_authorization do
   ActionDispatch::Callbacks.to_prepare do
     require "http_basic_authorization"
   end
+
+  settings default: { "email_suffix" => "@neopoly.de" },
+           partial: "http_basic_authorization/settings"
 end
 
 RedmineApp::Application.config.after_initialize do

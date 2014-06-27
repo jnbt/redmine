@@ -34,10 +34,14 @@ module HttpBasicAuthorization
       end
 
       def create_http_authorization_user(username)
-        email = "#{username}@neopoly.de"
+        email = "#{username}#{email_suffix}"
         user = User.new(mail: email, firstname: username, lastname: username)
         user.login = username
         user.save!
+      end
+
+      def email_suffix
+        Setting.plugin_http_basic_authorization["email_suffix"]
       end
     end
   end
