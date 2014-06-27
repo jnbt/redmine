@@ -1,0 +1,3 @@
+[submodule "plugins/redmine_startpage"]
+	path = plugins/redmine_startpage
+	url = https://github.com/txinto/redmine_startpage.git
