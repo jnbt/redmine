@@ -51,7 +51,9 @@ module ProjectOverviewPage
     end
 
     def render_content_for_page(context, page)
-      textilizable(
+      # this rendering must be done through the current view content
+      # otherwise textile macros and etc. won't be available
+      context[:controller].view_context.textilizable(
         page.content,
         :text,
         attachments: page.attachments,
