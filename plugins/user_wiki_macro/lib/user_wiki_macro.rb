@@ -1,4 +1,4 @@
-module WikiExtensionsTwitterMacro
+module UserWikiMacro
   Redmine::WikiFormatting::Macros.register do
     desc "Creates link to a user page including an avatar.<pre>" \
          "{{user(the_user_login)}}\n" \

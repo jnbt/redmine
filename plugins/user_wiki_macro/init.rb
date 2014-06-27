@@ -12,6 +12,6 @@ Redmine::Plugin.register :user_wiki_macro do
   end
 end
 
-ActionView::Base.class_eval do
-  include ActionView::Helpers::UserWikiMacroHelper
+ApplicationHelper.class_eval do
+  include UserWikiMacroHelper
 end
