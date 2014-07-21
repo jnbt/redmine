@@ -6,9 +6,6 @@ module ProjectOverviewPage
       project_overview: "WikiStart",
       project_sidebar:  "OverviewSidebar"
     }
-    def view_layouts_base_html_head(_context)
-      stylesheet_link_tag "project_overview_page", plugin: "project_overview_page"
-    end
 
     def view_projects_show_top(context)
       page = find_wiki_page(context, overview_wiki_title)
