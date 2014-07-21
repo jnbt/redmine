@@ -5,13 +5,15 @@ Redmine::Plugin.register :user_wiki_macro do
   version "0.0.1"
   url "http://www.neopoly.de"
   author_url "http://www.neopoly.de"
-
-  ActionDispatch::Callbacks.to_prepare do
-    require "user_wiki_macro"
-    require "user_wiki_macro_application_hooks"
-  end
 end
 
-ApplicationHelper.class_eval do
-  include UserWikiMacroHelper
+ActionDispatch::Callbacks.to_prepare do
+  unless ActionView::Base.included_modules.include?(ActionView::Base)
+    ActionView::Base.class_eval do
+      include UserWikiMacroHelper
+    end
+  end
+
+  require "user_wiki_macro"
+  require "user_wiki_macro_application_hooks"
 end
