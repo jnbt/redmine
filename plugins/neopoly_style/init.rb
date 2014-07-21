@@ -1,4 +1,4 @@
-Redmine::Plugin.register :neopoly_stylesheets do
+Redmine::Plugin.register :neopoly_style do
   name "Neopoly Stylesheets"
   author "Jonas Thiel"
   description "Custom style overrides"
@@ -7,6 +7,6 @@ Redmine::Plugin.register :neopoly_stylesheets do
   author_url "http://www.neopoly.de"
 
   ActionDispatch::Callbacks.to_prepare do
-    require "neopoly_stylesheets_application_hooks"
+    require "neopoly_style_application_hooks"
   end
 end
