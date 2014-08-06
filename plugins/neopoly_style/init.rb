@@ -8,5 +8,6 @@ Redmine::Plugin.register :neopoly_style do
 
   ActionDispatch::Callbacks.to_prepare do
     require "neopoly_style_application_hooks"
+    require "neopoly_style_application_helper_patch"
   end
 end
