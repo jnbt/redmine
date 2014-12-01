@@ -3,9 +3,9 @@ module MoreViewHooks
     class Hook
       attr_reader :deface_options
 
-      def initialize(hook_name, options)
+      def initialize(hook_name, context, options)
         @deface_options = options.merge(
-          text: "<%= call_hook(:#{hook_name}) %>",
+          text: "<%= call_hook(:#{hook_name}, #{context || "{}"}) %>",
           name: "more_view_hooks_#{hook_name}"
         )
       end
@@ -15,32 +15,38 @@ module MoreViewHooks
       end
     end
 
-    HOOKS = [
-      Hook.new(:view_projects_contextual,
-        virtual_path: "projects/show",
-        insert_top: "div.contextual"
-      ),
-      Hook.new(:view_projects_show_top,
-        virtual_path: "projects/show",
-        insert_before: "div.splitcontentleft"
-      ),
-      Hook.new(:view_projects_show_bottom,
-        virtual_path: "projects/show",
-        insert_after: "div.splitcontentright"
-      ),
-      Hook.new(:view_projects_show_sidebar_top,
-        virtual_path: "projects/show",
-        insert_before: "erb[silent]:contains('if @total_hours.present?')"
-      ),
-      Hook.new(:layout_base_logged_as_before,
-        virtual_path: "layouts/base",
-        insert_before: "#top-menu erb[loud]:contains('if User.current.logged?'):contains('content_tag')"
-      )
-    ]
+    HOOKS = []
 
     def apply!
       HOOKS.each(&:apply!)
+      HOOKS.freeze
     end
     module_function :apply!
+
+    def add(name, options)
+      context = options.delete(:context)
+      HOOKS << Hook.new(name, context, options)
+    end
+    module_function :add
+
+    add(:view_projects_contextual,
+      virtual_path: "projects/show",
+      insert_top: "div.contextual"
+    )
+
+    add(:view_projects_show_top,
+      virtual_path: "projects/show",
+      insert_before: "div.splitcontentleft"
+    )
+
+    add(:view_projects_show_bottom,
+      virtual_path: "projects/show",
+      insert_after: "div.splitcontentright"
+    )
+
+    add(:view_projects_show_sidebar_top,
+      virtual_path: "projects/show",
+      insert_before: "erb[silent]:contains('if @total_hours.present?')"
+    )
   end
 end

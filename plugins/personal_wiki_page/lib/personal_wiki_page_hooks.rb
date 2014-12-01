@@ -47,4 +47,10 @@ module PersonalWikiPage
       "#{prefix}#{user.login}"
     end
   end
+
+  MoreViewHooks::InjectHooks.add(
+    :layout_base_logged_as_before,
+    virtual_path:  "layouts/base",
+    insert_before: "#top-menu erb[loud]:contains('if User.current.logged?'):contains('content_tag')"
+  )
 end
