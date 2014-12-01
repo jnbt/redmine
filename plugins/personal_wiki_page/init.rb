@@ -3,9 +3,9 @@ Redmine::Plugin.register :personal_wiki_page do
   author "Jonas Thiel"
   author_url "http://www.neopoly.de"
   description "Adds a link to a personal wiki page to the header"
-  version "0.0.1"
+  version "0.0.2"
 
-  requires_redmine_plugin "more_view_hooks", version_or_higher: "0.0.1"
+  requires_redmine_plugin "more_view_hooks", version_or_higher: "0.0.2"
 
   settings :default => {
     'project' => 'orga',

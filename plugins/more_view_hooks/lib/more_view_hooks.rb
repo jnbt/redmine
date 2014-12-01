@@ -48,10 +48,5 @@ module MoreViewHooks
       virtual_path: "projects/show",
       insert_before: "erb[silent]:contains('if @total_hours.present?')"
     )
-
-    add(:layout_base_logged_as_before,
-      virtual_path: "layouts/base",
-      insert_before: "#top-menu erb[loud]:contains('if User.current.logged?'):contains('content_tag')"
-    )
   end
 end
