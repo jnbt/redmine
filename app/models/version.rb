@@ -60,6 +60,10 @@ class Version < ActiveRecord::Base
     project.present? && project.attachments_visible?(*args)
   end
 
+  def attachments_deletable?(usr=User.current)
+    project.present? && project.attachments_deletable?(usr)
+  end
+
   def start_date
     @start_date ||= fixed_issues.minimum('start_date')
   end
@@ -224,6 +228,11 @@ class Version < ActiveRecord::Base
         end
       end
     end
+  end
+
+  # Returns true if the version is shared, otherwise false
+  def shared?
+    sharing != 'none'
   end
 
   private

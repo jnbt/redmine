@@ -157,6 +157,13 @@ module ApplicationHelper
     end
   end
 
+  # Generates a link to a version
+  def link_to_version(version, options = {})
+    return '' unless version && version.is_a?(Version)
+    options = {:title => format_date(version.effective_date)}.merge(options)
+    link_to_if version.visible?, format_version_name(version), version_path(version), options
+  end
+
   # Helper that formats object for html or text rendering
   def format_object(object, html=true, &block)
     if block_given?
@@ -178,7 +185,7 @@ module ApplicationHelper
     when 'Project'
       html ? link_to_project(object) : object.to_s
     when 'Version'
-      html ? link_to(object.name, version_path(object)) : object.to_s
+      html ? link_to_version(object) : object.to_s
     when 'TrueClass'
       l(:general_text_Yes)
     when 'FalseClass'
@@ -240,7 +247,7 @@ module ApplicationHelper
   end
 
   def format_version_name(version)
-    if version.project == @project
+    if !version.shared? || version.project == @project
       h(version)
     else
       h("#{version.project} - #{version}")
@@ -342,7 +349,10 @@ module ApplicationHelper
   end
 
   def project_tree_options_for_select(projects, options = {})
-    s = ''
+    s = ''.html_safe
+    if options[:include_blank]
+      s << content_tag('option', '&nbsp;'.html_safe, :value => '')
+    end
     project_tree(projects) do |project, level|
       name_prefix = (level > 0 ? '&nbsp;' * 2 * level + '&#187; ' : '').html_safe
       tag_options = {:value => project.id}
@@ -579,7 +589,7 @@ module ApplicationHelper
     end
     return '' if text.blank?
     project = options[:project] || @project || (obj && obj.respond_to?(:project) ? obj.project : nil)
-    only_path = options.delete(:only_path) == false ? false : true
+    @only_path = only_path = options.delete(:only_path) == false ? false : true
 
     text = text.dup
     macros = catch_macros(text)
@@ -863,7 +873,7 @@ module ApplicationHelper
                 if repository && User.current.allowed_to?(:browse_repository, project)
                   name =~ %r{^[/\\]*(.*?)(@([^/\\@]+?))?(#(L\d+))?$}
                   path, rev, anchor = $1, $3, $5
-                  link = link_to h("#{project_prefix}#{prefix}:#{repo_prefix}#{name}"), {:controller => 'repositories', :action => (prefix == 'export' ? 'raw' : 'entry'), :id => project, :repository_id => repository.identifier_param,
+                  link = link_to h("#{project_prefix}#{prefix}:#{repo_prefix}#{name}"), {:only_path => only_path, :controller => 'repositories', :action => (prefix == 'export' ? 'raw' : 'entry'), :id => project, :repository_id => repository.identifier_param,
                                                           :path => to_path_param(path),
                                                           :rev => rev,
                                                           :anchor => anchor},
@@ -1183,7 +1193,7 @@ module ApplicationHelper
                      "beforeShow: beforeShowDatePicker};")
         jquery_locale = l('jquery.locale', :default => current_language.to_s)
         unless jquery_locale == 'en'
-          tags << javascript_include_tag("i18n/jquery.ui.datepicker-#{jquery_locale}.js")
+          tags << javascript_include_tag("i18n/datepicker-#{jquery_locale}.js")
         end
         tags
       end
@@ -1288,7 +1298,7 @@ module ApplicationHelper
 
   # Returns the javascript tags that are included in the html layout head
   def javascript_heads
-    tags = javascript_include_tag('jquery-1.8.3-ui-1.9.2-ujs-2.0.3', 'application')
+    tags = javascript_include_tag('jquery-1.11.1-ui-1.11.0-ujs-3.1.1', 'application')
     unless User.current.pref.warn_on_leaving_unsaved == '0'
       tags << "\n".html_safe + javascript_tag("$(window).load(function(){ warnLeavingUnsaved('#{escape_javascript l(:text_warn_on_leaving_unsaved)}'); });")
     end

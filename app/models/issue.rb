@@ -195,6 +195,7 @@ class Issue < ActiveRecord::Base
     @workflow_rule_by_attribute = nil
     @assignable_versions = nil
     @relations = nil
+    @spent_hours = nil
     base_reload(*args)
   end
 
@@ -624,7 +625,7 @@ class Issue < ActiveRecord::Base
           errors.add :base, v.custom_field.name + ' ' + l('activerecord.errors.messages.blank')
         end
       else
-        if respond_to?(attribute) && send(attribute).blank?
+        if respond_to?(attribute) && send(attribute).blank? && !disabled_core_fields.include?(attribute)
           errors.add attribute, :blank
         end
       end
@@ -1121,7 +1122,6 @@ class Issue < ActiveRecord::Base
   def parent_issue_id=(arg)
     s = arg.to_s.strip.presence
     if s && (m = s.match(%r{\A#?(\d+)\z})) && (@parent_issue = Issue.find_by_id(m[1]))
-      @parent_issue.id
       @invalid_parent_issue_id = nil
     elsif s.blank?
       @parent_issue = nil
@@ -1158,6 +1158,28 @@ class Issue < ActiveRecord::Base
       issue.project.is_or_is_ancestor_of?(project)
     else
       false
+    end
+  end
+
+  # Returns an issue scope based on project and scope
+  def self.cross_project_scope(project, scope=nil)
+    if project.nil?
+      return Issue
+    end
+    case scope
+    when 'all', 'system'
+      Issue
+    when 'tree'
+      Issue.joins(:project).where("(#{Project.table_name}.lft >= :lft AND #{Project.table_name}.rgt <= :rgt)",
+                                  :lft => project.root.lft, :rgt => project.root.rgt)
+    when 'hierarchy'
+      Issue.joins(:project).where("(#{Project.table_name}.lft >= :lft AND #{Project.table_name}.rgt <= :rgt) OR (#{Project.table_name}.lft < :lft AND #{Project.table_name}.rgt > :rgt)",
+                                  :lft => project.lft, :rgt => project.rgt)
+    when 'descendants'
+      Issue.joins(:project).where("(#{Project.table_name}.lft >= :lft AND #{Project.table_name}.rgt <= :rgt)",
+                                  :lft => project.lft, :rgt => project.rgt)
+    else
+      Issue.where(:project_id => project.id)
     end
   end
 
@@ -1327,8 +1349,6 @@ class Issue < ActiveRecord::Base
         offset = right_most_bound + 1 - lft
         Issue.where(cond).
           update_all(["root_id = ?, lft = lft + ?, rgt = rgt + ?", root_id, offset, offset])
-        self[left_column_name]  = lft + offset
-        self[right_column_name] = rgt + offset
       end
       if @parent_issue
         move_to_child_of(@parent_issue)
