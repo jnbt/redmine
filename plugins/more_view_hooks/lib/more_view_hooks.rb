@@ -45,7 +45,7 @@ module MoreViewHooks
     )
 
     add(:view_projects_show_sidebar_top,
-      virtual_path: "projects/show",
+      virtual_path: "projects/_sidebar",
       insert_before: "erb[silent]:contains('if @total_hours.present?')"
     )
   end

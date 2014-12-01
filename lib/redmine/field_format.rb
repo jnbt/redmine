@@ -566,6 +566,25 @@ module Redmine
       def group_statement(custom_field)
         order_statement(custom_field)
       end
+
+      def edit_tag(view, tag_id, tag_name, custom_value, options={})
+        case custom_value.custom_field.edit_tag_style
+        when 'check_box'
+          single_check_box_edit_tag(view, tag_id, tag_name, custom_value, options)
+        when 'radio'
+          check_box_edit_tag(view, tag_id, tag_name, custom_value, options)
+        else
+          select_edit_tag(view, tag_id, tag_name, custom_value, options)
+        end
+      end
+
+      # Renders the edit tag as a simple check box
+      def single_check_box_edit_tag(view, tag_id, tag_name, custom_value, options={})
+        s = ''.html_safe
+        s << view.hidden_field_tag(tag_name, '0', :id => nil)
+        s << view.check_box_tag(tag_name, '1', custom_value.value.to_s == '1', :id => tag_id)
+        view.content_tag('span', s, options)
+      end
     end
 
     class RecordList < List
@@ -577,6 +596,10 @@ module Redmine
 
       def target_class
         @target_class ||= self.class.name[/^(.*::)?(.+)Format$/, 2].constantize rescue nil
+      end
+
+      def reset_target_class
+        @target_class = nil
       end
  
       def possible_custom_value_options(custom_value)

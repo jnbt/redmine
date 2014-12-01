@@ -3,7 +3,7 @@ Redmine::Plugin.register :more_view_hooks do
   author "Jonas Thiel"
   author_url "http://www.neopoly.de"
   description "Adds more view hooks into the Redmine templates"
-  version "0.0.2"
+  version "0.0.3"
 
   ActionDispatch::Callbacks.to_prepare do
     require "more_view_hooks"
