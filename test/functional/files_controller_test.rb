@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2014  Jean-Philippe Lang
+# Copyright (C) 2006-2015  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -19,7 +19,9 @@ require File.expand_path('../../test_helper', __FILE__)
 
 class FilesControllerTest < ActionController::TestCase
   fixtures :projects, :trackers, :issue_statuses, :issues,
-           :enumerations, :users, :issue_categories,
+           :enumerations, :users,
+           :email_addresses,
+           :issue_categories,
            :projects_trackers,
            :roles,
            :member_roles,
@@ -41,12 +43,10 @@ class FilesControllerTest < ActionController::TestCase
     assert_not_nil assigns(:containers)
 
     # file attached to the project
-    assert_tag :a, :content => 'project_file.zip',
-                   :attributes => { :href => '/attachments/download/8/project_file.zip' }
+    assert_select 'a[href=?]', '/attachments/download/8/project_file.zip', :text => 'project_file.zip'
 
     # file attached to a project's version
-    assert_tag :a, :content => 'version_file.zip',
-                   :attributes => { :href => '/attachments/download/9/version_file.zip' }
+    assert_select 'a[href=?]', '/attachments/download/9/version_file.zip', :text => 'version_file.zip'
   end
 
   def test_new
@@ -55,7 +55,7 @@ class FilesControllerTest < ActionController::TestCase
     assert_response :success
     assert_template 'new'
 
-    assert_tag 'select', :attributes => {:name => 'version_id'}
+    assert_select 'select[name=?]', 'version_id'
   end
 
   def test_new_without_versions
@@ -65,7 +65,7 @@ class FilesControllerTest < ActionController::TestCase
     assert_response :success
     assert_template 'new'
 
-    assert_no_tag 'select', :attributes => {:name => 'version_id'}
+    assert_select 'select[name=?]', 'version_id', 0
   end
 
   def test_create_file

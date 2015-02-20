@@ -3,15 +3,15 @@
 # You can also run tests on your environment.
 language: ruby
 rvm:
-  - 1.8.7
-  - 1.9.2
   - 1.9.3
   - 2.0
   - 2.1
+  - 2.2
   - jruby
 matrix:
   allow_failures:
     # SCM tests fail randomly due to IO.popen().
+    # http://www.redmine.org/issues/19091
     # https://github.com/jruby/jruby/issues/779
     - rvm: jruby
 env:
@@ -34,6 +34,7 @@ script:
   - "bundle install"
   - "RUN_ON_NOT_OFFICIAL='' RUBY_VER=1.9 BRANCH=trunk bundle exec rake config/database.yml"
   - "bundle install"
-  - "JRUBY_OPTS=-J-Xmx1024m bundle exec rake ci"
+  - "bundle exec rake ci:setup"
+  - "sh .travis.run-test.sh"
 notifications:
   email: false

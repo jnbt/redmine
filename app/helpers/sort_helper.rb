@@ -84,7 +84,8 @@ module SortHelper
     def to_sql
       sql = @criteria.collect do |k,o|
         if s = @available_criteria[k]
-          (o ? s.to_a : s.to_a.collect {|c| append_desc(c)})
+          s = [s] unless s.is_a?(Array)
+          (o ? s : s.collect {|c| append_desc(c)})
         end
       end.flatten.compact
       sql.blank? ? nil : sql
@@ -122,7 +123,7 @@ module SortHelper
 
     def normalize!
       @criteria ||= []
-      @criteria = @criteria.collect {|s| s = s.to_a; [s.first, (s.last == false || s.last == 'desc') ? false : true]}
+      @criteria = @criteria.collect {|s| s = Array(s); [s.first, (s.last == false || s.last == 'desc') ? false : true]}
       @criteria = @criteria.select {|k,o| @available_criteria.has_key?(k)} if @available_criteria
       @criteria.slice!(3)
       self
