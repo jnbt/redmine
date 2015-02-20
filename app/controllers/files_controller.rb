@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2014  Jean-Philippe Lang
+# Copyright (C) 2006-2015  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -31,8 +31,10 @@ class FilesController < ApplicationController
                 'size' => "#{Attachment.table_name}.filesize",
                 'downloads' => "#{Attachment.table_name}.downloads"
 
-    @containers = [ Project.includes(:attachments).reorder(sort_clause).find(@project.id)]
-    @containers += @project.versions.includes(:attachments).reorder(sort_clause).all.sort.reverse
+    @containers = [Project.includes(:attachments).
+                     references(:attachments).reorder(sort_clause).find(@project.id)]
+    @containers += @project.versions.includes(:attachments).
+                    references(:attachments).reorder(sort_clause).to_a.sort.reverse
     render :layout => !request.xhr?
   end
 

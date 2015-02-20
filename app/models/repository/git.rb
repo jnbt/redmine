@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2014  Jean-Philippe Lang
+# Copyright (C) 2006-2015  Jean-Philippe Lang
 # Copyright (C) 2007  Patrick Aljord patcito@ŋmail.com
 #
 # This program is free software; you can redistribute it and/or
@@ -241,7 +241,7 @@ class Repository::Git < Repository
   def latest_changesets(path,rev,limit=10)
     revisions = scm.revisions(path, nil, rev, :limit => limit, :all => false)
     return [] if revisions.nil? || revisions.empty?
-    changesets.where(:scmid => revisions.map {|c| c.scmid}).all
+    changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
   end
 
   def clear_extra_info_of_changesets
