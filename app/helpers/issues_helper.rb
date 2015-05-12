@@ -98,7 +98,7 @@ module IssuesHelper
 
   def render_descendants_tree(issue)
     s = '<form><table class="list issues">'
-    issue_list(issue.descendants.visible.sort_by(&:lft)) do |child, level|
+    issue_list(issue.descendants.visible.preload(:status, :priority, :tracker).sort_by(&:lft)) do |child, level|
       css = "issue issue-#{child.id} hascontextmenu"
       css << " idnt idnt-#{level}" if level > 0
       s << content_tag('tr',
@@ -320,15 +320,19 @@ module IssuesHelper
       end
       strings << show_detail(detail, no_html, options)
     end
-    values_by_field.each do |field, changes|
-      detail = JournalDetail.new(:property => 'cf', :prop_key => field.id.to_s)
-      detail.instance_variable_set "@custom_field", field
-      if changes[:added].any?
-        detail.value = changes[:added]
-        strings << show_detail(detail, no_html, options)
-      elsif changes[:deleted].any?
-        detail.old_value = changes[:deleted]
-        strings << show_detail(detail, no_html, options)
+    if values_by_field.present?
+      multiple_values_detail = Struct.new(:property, :prop_key, :custom_field, :old_value, :value)
+      values_by_field.each do |field, changes|
+        if changes[:added].any?
+          detail = multiple_values_detail.new('cf', field.id.to_s, field)
+          detail.value = changes[:added]
+          strings << show_detail(detail, no_html, options)
+        end
+        if changes[:deleted].any?
+          detail = multiple_values_detail.new('cf', field.id.to_s, field)
+          detail.old_value = changes[:deleted]
+          strings << show_detail(detail, no_html, options)
+        end
       end
     end
     strings

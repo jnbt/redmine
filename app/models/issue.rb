@@ -96,6 +96,7 @@ class Issue < ActiveRecord::Base
     ids.any? ? where(:fixed_version_id => ids) : where('1=0')
   }
 
+  before_validation :clear_disabled_fields
   before_create :default_assign
   before_save :close_duplicates, :update_done_ratio_from_issue_status,
               :force_updated_on_change, :update_closed_on, :set_assigned_to_was
@@ -447,6 +448,11 @@ class Issue < ActiveRecord::Base
     if (t = attrs.delete('tracker_id')) && safe_attribute?('tracker_id')
       self.tracker_id = t
     end
+    if project
+      # Set the default tracker to accept custom field values
+      # even if tracker is not specified
+      self.tracker ||= project.trackers.first
+    end
 
     if (s = attrs.delete('status_id')) && safe_attribute?('status_id')
       if new_statuses_allowed_to(user).collect(&:id).include?(s.to_i)
@@ -543,13 +549,27 @@ class Issue < ActiveRecord::Base
     workflow_permissions = WorkflowPermission.where(:tracker_id => tracker_id, :old_status_id => status_id, :role_id => roles.map(&:id)).to_a
     if workflow_permissions.any?
       workflow_rules = workflow_permissions.inject({}) do |h, wp|
-        h[wp.field_name] ||= []
-        h[wp.field_name] << wp.rule
+        h[wp.field_name] ||= {}
+        h[wp.field_name][wp.role_id] = wp.rule
         h
+      end
+      fields_with_roles = {}
+      IssueCustomField.where(:visible => false).joins(:roles).pluck(:id, "role_id").each do |field_id, role_id|
+        fields_with_roles[field_id] ||= []
+        fields_with_roles[field_id] << role_id
+      end
+      roles.each do |role|
+        fields_with_roles.each do |field_id, role_ids|
+          unless role_ids.include?(role.id)
+            field_name = field_id.to_s
+            workflow_rules[field_name] ||= {}
+            workflow_rules[field_name][role.id] = 'readonly'
+          end
+        end
       end
       workflow_rules.each do |attr, rules|
         next if rules.size < roles.size
-        uniq_rules = rules.uniq
+        uniq_rules = rules.values.uniq
         if uniq_rules.size == 1
           result[attr] = uniq_rules.first
         else
@@ -659,7 +679,11 @@ class Issue < ActiveRecord::Base
 
   # Returns the names of attributes that are journalized when updating the issue
   def journalized_attribute_names
-    Issue.column_names - %w(id root_id lft rgt lock_version created_on updated_on closed_on)
+    names = Issue.column_names - %w(id root_id lft rgt lock_version created_on updated_on closed_on)
+    if tracker
+      names -= tracker.disabled_core_fields
+    end
+    names
   end
 
   # Returns the id of the last journal or nil
@@ -819,12 +843,12 @@ class Issue < ActiveRecord::Base
     end
   end
 
-  # Returns the previous assignee if changed
+  # Returns the previous assignee (user or group) if changed
   def assigned_to_was
     # assigned_to_id_was is reset before after_save callbacks
     user_id = @previous_assigned_to_id || assigned_to_id_was
     if user_id && user_id != assigned_to_id
-      @assigned_to_was ||= User.find_by_id(user_id)
+      @assigned_to_was ||= Principal.find_by_id(user_id)
     end
   end
 
@@ -1559,5 +1583,14 @@ class Issue < ActiveRecord::Base
   def clear_assigned_to_was
     @assigned_to_was = nil
     @previous_assigned_to_id = nil
+  end
+
+  def clear_disabled_fields
+    if tracker
+      tracker.disabled_core_fields.each do |attribute|
+        send "#{attribute}=", nil
+      end
+      self.done_ratio ||= 0
+    end
   end
 end

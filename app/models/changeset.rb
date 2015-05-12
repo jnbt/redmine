@@ -69,16 +69,6 @@ class Changeset < ActiveRecord::Base
     end
   end
 
-  def committer=(arg)
-    write_attribute :committer,
-      self.class.to_utf8(arg, repository.try(:repo_log_encoding))
-  end
-
-  def comments=(arg)
-    write_attribute :comments,
-      self.class.normalize_comments(arg, repository.try(:repo_log_encoding))
-  end
-
   def committed_on=(date)
     self.commit_date = date
     super
@@ -102,7 +92,9 @@ class Changeset < ActiveRecord::Base
   end
 
   def before_create_cs
-    self.comments ||= ''
+    self.committer = self.class.to_utf8(self.committer, repository.repo_log_encoding)
+    self.comments  = self.class.normalize_comments(
+                       self.comments, repository.repo_log_encoding)
     self.user = repository.find_committer_user(self.committer)
   end
 
@@ -250,8 +242,11 @@ class Changeset < ActiveRecord::Base
     end
     Redmine::Hook.call_hook(:model_changeset_scan_commit_for_issue_ids_pre_issue_update,
                             { :changeset => self, :issue => issue, :action => action })
-    unless issue.save
-      logger.warn("Issue ##{issue.id} could not be saved by changeset #{id}: #{issue.errors.full_messages}") if logger
+
+    if issue.changes.any?
+      unless issue.save
+        logger.warn("Issue ##{issue.id} could not be saved by changeset #{id}: #{issue.errors.full_messages}") if logger
+      end
     end
     issue
   end

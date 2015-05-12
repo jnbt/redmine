@@ -265,6 +265,14 @@ class IssuesControllerTest < ActionController::TestCase
     assert_not_nil assigns(:issue_count_by_group)
   end
 
+  def test_index_with_query_grouped_and_sorted_by_category
+    get :index, :project_id => 1, :set_filter => 1, :group_by => "category", :sort => "category"
+    assert_response :success
+    assert_template 'index'
+    assert_not_nil assigns(:issues)
+    assert_not_nil assigns(:issue_count_by_group)
+  end
+
   def test_index_with_query_grouped_by_list_custom_field
     get :index, :project_id => 1, :query_id => 9
     assert_response :success
@@ -529,10 +537,10 @@ class IssuesControllerTest < ActionController::TestCase
       assert_equal 'text/csv; header=present', @response.content_type
       lines = @response.body.chomp.split("\n")
       header = lines[0]
+      status = "\xaa\xac\xbaA".force_encoding('Big5')
+      assert header.include?(status)
       issue_line = lines.find {|l| l =~ /^#{issue.id},/}
-      s1 = "\xaa\xac\xbaA".force_encoding('Big5')
-      assert_include s1, header
-      assert_include str_big5, issue_line
+      assert issue_line.include?(str_big5)
     end
   end
 
@@ -849,7 +857,7 @@ class IssuesControllerTest < ActionController::TestCase
   def test_index_with_fixed_version_column
     get :index, :set_filter => 1, :c => %w(fixed_version)
     assert_select 'table.issues td.fixed_version' do
-      assert_select 'a[href=?]', '/versions/2', :text => '1.0'
+      assert_select 'a[href=?]', '/versions/2', :text => 'eCookbook - 1.0'
     end
   end
 
@@ -2218,7 +2226,7 @@ class IssuesControllerTest < ActionController::TestCase
            :issue => {:project_id => 3,
                       :tracker_id => 2,
                       :subject => 'Foo'}
-      assert_response 403
+      assert_response 422
     end
   end
 
@@ -2603,6 +2611,20 @@ class IssuesControllerTest < ActionController::TestCase
     assert_equal 2, issue.project_id
     assert_equal 3, issue.tracker_id
     assert_equal 'Copy', issue.subject
+  end
+
+  def test_create_as_copy_should_allow_status_to_be_set_to_default
+    copied = Issue.generate! :status_id => 2
+    assert_equal 2, copied.reload.status_id
+
+    @request.session[:user_id] = 2
+    assert_difference 'Issue.count' do
+      post :create, :project_id => 1, :copy_from => copied.id,
+        :issue => {:project_id => '1', :tracker_id => '1', :status_id => '1'},
+        :was_default_status => '1'
+    end
+    issue = Issue.order('id DESC').first
+    assert_equal 1, issue.status_id
   end
 
   def test_create_as_copy_should_copy_attachments
@@ -3389,7 +3411,7 @@ class IssuesControllerTest < ActionController::TestCase
 
   def test_get_bulk_edit
     @request.session[:user_id] = 2
-    get :bulk_edit, :ids => [1, 2]
+    get :bulk_edit, :ids => [1, 3]
     assert_response :success
     assert_template 'bulk_edit'
 
@@ -3440,7 +3462,7 @@ class IssuesControllerTest < ActionController::TestCase
   end
 
   def test_get_bulk_edit_with_user_custom_field
-    field = IssueCustomField.create!(:name => 'Tester', :field_format => 'user', :is_for_all => true)
+    field = IssueCustomField.create!(:name => 'Tester', :field_format => 'user', :is_for_all => true, :tracker_ids => [1,2,3])
 
     @request.session[:user_id] = 2
     get :bulk_edit, :ids => [1, 2]
@@ -3453,7 +3475,7 @@ class IssuesControllerTest < ActionController::TestCase
   end
 
   def test_get_bulk_edit_with_version_custom_field
-    field = IssueCustomField.create!(:name => 'Affected version', :field_format => 'version', :is_for_all => true)
+    field = IssueCustomField.create!(:name => 'Affected version', :field_format => 'version', :is_for_all => true, :tracker_ids => [1,2,3])
 
     @request.session[:user_id] = 2
     get :bulk_edit, :ids => [1, 2]
@@ -3470,7 +3492,7 @@ class IssuesControllerTest < ActionController::TestCase
     field.update_attribute :multiple, true
 
     @request.session[:user_id] = 2
-    get :bulk_edit, :ids => [1, 2]
+    get :bulk_edit, :ids => [1, 3]
     assert_response :success
     assert_template 'bulk_edit'
 
@@ -3534,6 +3556,17 @@ class IssuesControllerTest < ActionController::TestCase
     assert_select 'select[name=?]', 'issue[category_id]' do
       assert_select 'option', :text => 'Recipes'
     end
+  end
+
+  def test_bulk_edit_should_only_propose_issues_trackers_custom_fields
+    IssueCustomField.delete_all
+    field = IssueCustomField.generate!(:tracker_ids => [1], :is_for_all => true)
+    IssueCustomField.generate!(:tracker_ids => [2], :is_for_all => true)
+    @request.session[:user_id] = 2
+
+    issue_ids = Issue.where(:project_id => 1, :tracker_id => 1).limit(2).ids
+    get :bulk_edit, :ids => issue_ids
+    assert_equal [field], assigns(:custom_fields)
   end
 
   def test_bulk_update

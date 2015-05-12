@@ -1,6 +1,10 @@
 source 'https://rubygems.org'
 
-gem "rails", "4.2.0"
+if Gem::Version.new(Bundler::VERSION) < Gem::Version.new('1.5.0')
+  abort "Redmine requires Bundler 1.5.0 or higher (you're using #{Bundler::VERSION}).\nPlease update with 'gem update bundler'." 
+end
+
+gem "rails", "4.2.1"
 gem "jquery-rails", "~> 3.1.1"
 gem "coderay", "~> 1.1.0"
 gem "builder", ">= 3.0.4"
@@ -28,7 +32,7 @@ end
 platforms :mri, :mingw, :x64_mingw do
   # Optional gem for exporting the gantt to a PNG file, not supported with jruby
   group :rmagick do
-    gem "rmagick", ">= 2.0.0"
+    gem "rmagick", "~> 2.13.4"
   end
 
   # Optional Markdown support, not for JRuby
@@ -64,7 +68,8 @@ if File.exist?(database_file)
         gem "activerecord-jdbcpostgresql-adapter", :platforms => :jruby
       when /sqlite3/
         gem "sqlite3", :platforms => [:mri, :mingw, :x64_mingw]
-        gem "activerecord-jdbcsqlite3-adapter", "1.3.11", :platforms => :jruby
+        gem "jdbc-sqlite3", "< 3.8", :platforms => :jruby
+        gem "activerecord-jdbcsqlite3-adapter", :platforms => :jruby
       when /sqlserver/
         gem "tiny_tds", "~> 0.6.2", :platforms => [:mri, :mingw, :x64_mingw]
         gem "activerecord-sqlserver-adapter", :platforms => [:mri, :mingw, :x64_mingw]

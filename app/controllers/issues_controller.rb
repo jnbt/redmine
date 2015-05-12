@@ -103,7 +103,7 @@ class IssuesController < ApplicationController
     @journals.select! {|journal| journal.notes? || journal.visible_details.any?}
     @journals.reverse! if User.current.wants_comments_in_reverse_order?
 
-    @changesets = @issue.changesets.visible.to_a
+    @changesets = @issue.changesets.visible.preload(:repository, :user).to_a
     @changesets.reverse! if User.current.wants_comments_in_reverse_order?
 
     @relations = @issue.relations.select {|r| r.other_issue(@issue) && r.other_issue(@issue).visible? }
@@ -133,7 +133,7 @@ class IssuesController < ApplicationController
   end
 
   def create
-    unless User.current.allowed_to?(:add_issues, @issue.project)
+    unless User.current.allowed_to?(:add_issues, @issue.project, :global => true)
       raise ::Unauthorized
     end
     call_hook(:controller_issues_new_before_save, { :params => params, :issue => @issue })
@@ -151,7 +151,13 @@ class IssuesController < ApplicationController
       return
     else
       respond_to do |format|
-        format.html { render :action => 'new' }
+        format.html {
+          if @issue.project.nil?
+            render_error :status => 422
+          else
+            render :action => 'new'
+          end
+        }
         format.api  { render_validation_errors(@issue) }
       end
     end
@@ -223,7 +229,7 @@ class IssuesController < ApplicationController
     else
       @available_statuses = @issues.map(&:new_statuses_allowed_to).reduce(:&)
     end
-    @custom_fields = target_projects.map{|p|p.all_issue_custom_fields.visible}.reduce(:&)
+    @custom_fields = @issues.map{|i|i.editable_custom_fields}.reduce(:&)
     @assignables = target_projects.map(&:assignable_users).reduce(:&)
     @trackers = target_projects.map(&:trackers).reduce(:&)
     @versions = target_projects.map {|p| p.shared_versions.open}.reduce(:&)
@@ -419,7 +425,7 @@ class IssuesController < ApplicationController
     @issue.start_date ||= Date.today if Setting.default_issue_start_date_to_creation_date?
 
     if attrs = params[:issue].deep_dup
-      if params[:was_default_status] == attrs[:status_id]
+      if action_name == 'new' && params[:was_default_status] == attrs[:status_id]
         attrs.delete(:status_id)
       end
       @issue.safe_attributes = attrs

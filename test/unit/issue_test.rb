@@ -70,6 +70,15 @@ class IssueTest < ActiveSupport::TestCase
     assert_nil issue.estimated_hours
   end
 
+  def test_create_with_all_fields_disabled
+    tracker = Tracker.find(1)
+    tracker.core_fields = []
+    tracker.save!
+
+    issue = Issue.new(:project_id => 1, :tracker_id => 1, :author_id => 3, :subject => 'test_create_with_all_fields_disabled')
+    assert_save issue
+  end
+
   def test_start_date_format_should_be_validated
     set_language_if_valid 'en'
     ['2012', 'ABC', '2012-15-20'].each do |invalid_date|
@@ -502,6 +511,38 @@ class IssueTest < ActiveSupport::TestCase
     assert_equal 'MySQL', issue.custom_field_value(1)
   end
 
+  def test_changing_tracker_should_clear_disabled_core_fields
+    tracker = Tracker.find(2)
+    tracker.core_fields = tracker.core_fields - %w(due_date)
+    tracker.save!
+
+    issue = Issue.generate!(:tracker_id => 1, :start_date => Date.today, :due_date => Date.today)
+    issue.save!
+
+    issue.tracker_id = 2
+    issue.save!
+    assert_not_nil issue.start_date
+    assert_nil issue.due_date
+  end
+
+  def test_changing_tracker_should_not_add_cleared_fields_to_journal
+    tracker = Tracker.find(2)
+    tracker.core_fields = tracker.core_fields - %w(due_date)
+    tracker.save!
+
+    issue = Issue.generate!(:tracker_id => 1, :due_date => Date.today)
+    issue.save!
+
+    assert_difference 'Journal.count' do
+      issue.init_journal User.find(1)
+      issue.tracker_id = 2
+      issue.save!
+      assert_nil issue.due_date
+    end
+    journal = Journal.order('id DESC').first
+    assert_equal 1, journal.details.count
+  end
+
   def test_reload_should_reload_custom_field_values
     issue = Issue.generate!
     issue.custom_field_values = {'2' => 'Foo'}
@@ -888,7 +929,7 @@ class IssueTest < ActiveSupport::TestCase
     assert_equal [], issue.required_attribute_names(user.reload)
 
     WorkflowPermission.create!(:old_status_id => 1, :tracker_id => 1,
-                               :role_id => 2, :field_name => 'due_date',
+                               :role_id => 3, :field_name => 'due_date',
                                :rule => 'readonly')
     # required + readonly => required
     assert_equal %w(due_date), issue.required_attribute_names(user)
@@ -918,6 +959,23 @@ class IssueTest < ActiveSupport::TestCase
     assert_equal %w(due_date), issue.read_only_attribute_names(user)
   end
 
+  # A field that is not visible by role 2 and readonly by role 1 should be readonly for user with role 1 and 2
+  def test_read_only_attribute_names_should_include_custom_fields_that_combine_readonly_and_not_visible_for_roles
+    field = IssueCustomField.generate!(
+      :is_for_all => true, :trackers => Tracker.all, :visible => false, :role_ids => [1]
+    )
+    WorkflowPermission.delete_all
+    WorkflowPermission.create!(
+      :old_status_id => 1, :tracker_id => 1, :role_id => 1, :field_name => field.id, :rule => 'readonly'
+    )
+    user = User.generate!
+    project = Project.find(1)
+    User.add_to_project(user, project, Role.where(:id => [1, 2]))
+
+    issue = Issue.new(:project_id => 1, :tracker_id => 1, :status_id => 1)
+    assert_equal [field.id.to_s], issue.read_only_attribute_names(user)
+  end
+
   def test_workflow_rules_should_ignore_roles_without_issue_permissions
     role = Role.generate! :permissions => [:view_issues, :edit_issues]
     ignored_role = Role.generate! :permissions => [:view_issues]
@@ -939,6 +997,27 @@ class IssueTest < ActiveSupport::TestCase
 
     assert_equal %w(due_date), issue.required_attribute_names(user)
     assert_equal %w(done_ratio start_date), issue.read_only_attribute_names(user).sort
+  end
+
+  def test_workflow_rules_should_work_for_member_with_duplicate_role
+    WorkflowPermission.delete_all
+    WorkflowPermission.create!(:old_status_id => 1, :tracker_id => 1,
+                               :role_id => 1, :field_name => 'due_date',
+                               :rule => 'required')
+    WorkflowPermission.create!(:old_status_id => 1, :tracker_id => 1,
+                               :role_id => 1, :field_name => 'start_date',
+                               :rule => 'readonly')
+
+    user = User.generate!
+    m = Member.new(:user_id => user.id, :project_id => 1)
+    m.member_roles.build(:role_id => 1)
+    m.member_roles.build(:role_id => 1)
+    m.save!
+
+    issue = Issue.new(:project_id => 1, :tracker_id => 1, :status_id => 1)
+
+    assert_equal %w(due_date), issue.required_attribute_names(user)
+    assert_equal %w(start_date), issue.read_only_attribute_names(user)
   end
 
   def test_copy
@@ -2590,5 +2669,13 @@ class IssueTest < ActiveSupport::TestCase
     assert_equal IssueStatus.find(3), issue.status
     issue.tracker = Tracker.find(2)
     assert_equal IssueStatus.find(3), issue.status
+  end
+
+  def test_assigned_to_was_with_a_group
+    group = Group.find(10)
+
+    issue = Issue.generate!(:assigned_to => group)
+    issue.reload.assigned_to = nil
+    assert_equal group, issue.assigned_to_was
   end
 end
