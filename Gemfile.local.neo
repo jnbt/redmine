@@ -1,10 +1,15 @@
 gem "redmine-http_basic_authentication"
 gem "redmine-user_wiki_macro"
 gem "redmine-neopoly_style"
-gem "redmine-more_view_hooks", "~> 0.0.2"
+gem "redmine-more_view_hooks", "~> 0.0.3"
 gem "redmine-personal_wiki_page"
 gem "redmine-project_custom_style"
 gem "redmine-roadmap_extended_issues"
 gem "redmine-project_overview_page"
 gem "redmine-custom_startpage"
 gem "redmine-per_user_status"
+
+# Additional plugins to be installed:
+# * easy_baseline
+# * easy_gantt
+# * easy_gantt_pro
