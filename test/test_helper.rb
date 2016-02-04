@@ -33,6 +33,8 @@ include ObjectHelpers
 require 'net/ldap'
 require 'mocha/setup'
 
+Redmine::SudoMode.disable!
+
 class ActionView::TestCase
   helper :application
   include ApplicationHelper
@@ -176,6 +178,21 @@ class ActiveSupport::TestCase
   def quoted_date(date)
     date = Date.parse(date) if date.is_a?(String)
     ActiveRecord::Base.connection.quoted_date(date)
+  end
+
+  # Asserts that a new record for the given class is created
+  # and returns it
+  def new_record(klass, &block)
+    new_records(klass, 1, &block).first
+  end
+
+  # Asserts that count new records for the given class are created
+  # and returns them as an array order by object id
+  def new_records(klass, count, &block)
+    assert_difference "#{klass}.count", count do
+      yield
+    end
+    klass.order(:id => :desc).limit(count).to_a.reverse
   end
 
   def assert_save(object)

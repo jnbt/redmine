@@ -185,18 +185,6 @@ class MyControllerTest < ActionController::TestCase
     assert User.try_to_login('jsmith', 'secret123')
   end
 
-  def test_change_password_kills_other_sessions
-    @request.session[:ctime] = (Time.now - 30.minutes).utc.to_i
-
-    jsmith = User.find(2)
-    jsmith.passwd_changed_on = Time.now
-    jsmith.save!
-
-    get 'account'
-    assert_response 302
-    assert flash[:error].match(/Your session has expired/)
-  end
-
   def test_change_password_should_redirect_if_user_cannot_change_its_password
     User.find(2).update_attribute(:auth_source_id, 1)
 
@@ -251,6 +239,12 @@ class MyControllerTest < ActionController::TestCase
     assert User.find(2).rss_token
     assert_match /reset/, flash[:notice]
     assert_redirected_to '/my/account'
+  end
+
+  def test_show_api_key
+    get :show_api_key
+    assert_response :success
+    assert_select 'pre', User.find(2).api_key
   end
 
   def test_reset_api_key_with_existing_key

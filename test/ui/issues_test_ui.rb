@@ -18,10 +18,10 @@
 require File.expand_path('../base', __FILE__)
 
 class Redmine::UiTest::IssuesTest < Redmine::UiTest::Base
-  fixtures :projects, :users, :roles, :members, :member_roles,
+  fixtures :projects, :users, :email_addresses, :roles, :members, :member_roles,
            :trackers, :projects_trackers, :enabled_modules, :issue_statuses, :issues,
            :enumerations, :custom_fields, :custom_values, :custom_fields_trackers,
-           :watchers
+           :watchers, :journals, :journal_details
 
   def test_create_issue
     log_user('jsmith', 'jsmith')
@@ -150,15 +150,30 @@ class Redmine::UiTest::IssuesTest < Redmine::UiTest::Base
     end
   end
 
-  def test_create_issue_start_due_date_default
+  def test_default_due_date_proposed_in_date_picker
     log_user('jsmith', 'jsmith')
     visit '/projects/ecookbook/issues/new'
+
+    # Future start date: due date should default to start date
+    fill_in 'Start date', :with => '2027-04-01'
+    fill_in 'Due date', :with => ''
+    page.first('p#due_date_area img').click
+    page.first("td.ui-datepicker-days-cell-over a").click
+    assert_equal '2027-04-01', page.find('input#issue_due_date').value
+
+    # Passed start date: due date should default to today
     fill_in 'Start date', :with => '2012-04-01'
     fill_in 'Due date', :with => ''
     page.first('p#due_date_area img').click
     page.first("td.ui-datepicker-days-cell-over a").click
-    assert_equal '2012-04-01', page.find('input#issue_due_date').value
+    assert_equal Date.today.to_s, page.find('input#issue_due_date').value
+  end
 
+  def test_default_start_date_proposed_in_date_picker
+    log_user('jsmith', 'jsmith')
+    visit '/projects/ecookbook/issues/new'
+
+    # Passed due date: start date should default to due date
     fill_in 'Start date', :with => ''
     fill_in 'Due date', :with => '2012-04-01'
     page.first('p#start_date_area img').click
@@ -225,6 +240,17 @@ class Redmine::UiTest::IssuesTest < Redmine::UiTest::Base
       assert page.first('#sidebar').has_content?('Watchers (0)')
     end
     assert page.first('#sidebar').has_no_content?(user.name)
+  end
+
+  def test_watch_should_update_watchers_list
+    user = User.find(2)
+    log_user('jsmith', 'jsmith')
+    visit '/issues/1'
+    assert page.first('#sidebar').has_content?('Watchers (0)')
+
+    page.first('a.issue-1-watcher').click
+    assert page.first('#sidebar').has_content?('Watchers (1)')
+    assert page.first('#sidebar').has_content?(user.name)
   end
 
   def test_watch_issue_via_context_menu

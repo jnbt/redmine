@@ -395,6 +395,7 @@ de:
   general_csv_encoding: ISO-8859-1
   general_csv_separator: ';'
   general_pdf_fontname: freesans
+  general_pdf_monospaced_fontname: freemono
   general_first_day_of_week: '1'
   general_lang_name: 'German (Deutsch)'
   general_text_No: 'Nein'
@@ -526,8 +527,6 @@ de:
   label_duplicated_by: Dupliziert durch
   label_duplicates: Duplikat von
   label_edit_attachments: Angehängte Dateien bearbeiten
-  label_end_to_end: Ende - Ende
-  label_end_to_start: Ende - Anfang
   label_enumeration_new: Neuer Wert
   label_enumerations: Aufzählungen
   label_environment: Umgebung
@@ -670,6 +669,7 @@ de:
   label_overview: Übersicht
   label_parent_revision: Vorgänger
   label_password_lost: Kennwort vergessen
+  label_password_required: Bitte geben Sie Ihr Kennwort ein
   label_permissions: Berechtigungen
   label_permissions_report: Berechtigungsübersicht
   label_personalize_page: Diese Seite anpassen
@@ -745,8 +745,6 @@ de:
   label_sort_lower: Eins tiefer
   label_sort_lowest: Ans Ende
   label_spent_time: Aufgewendete Zeit
-  label_start_to_end: Anfang - Ende
-  label_start_to_start: Anfang - Anfang
   label_statistics: Statistiken
   label_status_transitions: Statusänderungen
   label_stay_logged_in: Angemeldet bleiben
@@ -829,10 +827,6 @@ de:
     zero:  0 offen
     one:   1 offen
     other: "%{count} offen"
-  label_x_open_issues_abbr_on_total:
-    zero:  0 offen / %{total}
-    one:   1 offen / %{total}
-    other: "%{count} offen / %{total}"
   label_x_projects:
     zero:  keine Projekte
     one:   1 Projekt
@@ -1026,6 +1020,7 @@ de:
   setting_non_working_week_days: Arbeitsfreie Tage
   setting_openid: Erlaube OpenID-Anmeldung und -Registrierung
   setting_password_min_length: Mindestlänge des Kennworts
+  setting_password_max_age: Erzwinge Passwortwechsel nach
   setting_per_page_options: Objekte pro Seite
   setting_plain_text_mail: Nur reinen Text (kein HTML) senden
   setting_protocol: Protokoll
@@ -1150,3 +1145,49 @@ de:
   setting_search_results_per_page: Suchergebnisse pro Seite
   label_blank_value: leer
   permission_copy_issues: Tickets kopieren
+  error_password_expired: Your password has expired or the administrator requires you
+    to change it.
+  field_time_entries_visibility: Time logs visibility
+  label_parent_task_attributes: Parent tasks attributes
+  label_parent_task_attributes_derived: Calculated from subtasks
+  label_parent_task_attributes_independent: Independent of subtasks
+  label_time_entries_visibility_all: All time entries
+  label_time_entries_visibility_own: Time entries created by the user
+  label_member_management: Member management
+  label_member_management_all_roles: Alle Rollen
+  label_member_management_selected_roles_only: Nur diese Rollen
+  label_total_spent_time: Aufgewendete Zeit aller Projekte anzeigen
+  notice_import_finished: Alle %{count} Einträge wurden importiert.
+  notice_import_finished_with_errors: ! '%{count} von %{total} Einträgen konnten nicht
+    importiert werden.'
+  error_invalid_file_encoding: The file is not a valid %{encoding} encoded file
+  error_invalid_csv_file_or_settings: The file is not a CSV file or does not match the
+    settings below
+  error_can_not_read_import_file: Beim Einlesen der Datei ist ein Fehler aufgetreten
+  permission_import_issues: Tickets importieren
+  label_import_issues: Tickets importieren
+  label_select_file_to_import: Bitte wählen Sie eine Datei für den Import aus
+  label_fields_separator: Trennzeichen
+  label_fields_wrapper: Field wrapper
+  label_encoding: Encoding
+  label_comma_char: Komma
+  label_semi_colon_char: Semikolon
+  label_quote_char: Anführungszeichen
+  label_double_quote_char: Doppelte Anführungszeichen
+  label_fields_mapping: Fields mapping
+  label_file_content_preview: File content preview
+  label_create_missing_values: Create missing values
+  button_import: Importieren
+  field_total_estimated_hours: Total estimated time
+  label_api: API
+  label_total_plural: Totals
+  label_assigned_issues: Assigned issues
+  label_field_format_enumeration: Key/value list
+  label_f_hour_short: '%{value} h'
+  field_default_version: Standard-Version
+  error_attachment_extension_not_allowed: Attachment Erweiterung %{extension} ist nicht zugelassen
+  setting_attachment_extensions_allowed: Zugelassene Erweiterungen
+  setting_attachment_extensions_denied: Nicht zugelassene Erweiterungen
+  label_any_open_issues: any open issues
+  label_no_open_issues: no open issues
+  label_default_values_for_new_users: Standardwerte für neue Benutzer

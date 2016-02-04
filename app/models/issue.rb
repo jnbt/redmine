@@ -95,6 +95,13 @@ class Issue < ActiveRecord::Base
     ids = [versions].flatten.compact.map {|v| v.is_a?(Version) ? v.id : v}
     ids.any? ? where(:fixed_version_id => ids) : where('1=0')
   }
+  scope :assigned_to, lambda {|arg|
+    arg = Array(arg).uniq
+    ids = arg.map {|p| p.is_a?(Principal) ? p.id : p}
+    ids += arg.select {|p| p.is_a?(User)}.map(&:group_ids).flatten.uniq
+    ids.compact!
+    ids.any? ? where(:assigned_to_id => ids) : none
+  }
 
   before_validation :clear_disabled_fields
   before_create :default_assign
@@ -206,6 +213,8 @@ class Issue < ActiveRecord::Base
     @assignable_versions = nil
     @relations = nil
     @spent_hours = nil
+    @total_spent_hours = nil
+    @total_estimated_hours = nil
     base_reload(*args)
   end
 
@@ -293,7 +302,7 @@ class Issue < ActiveRecord::Base
   # * or if the status was not part of the new tracker statuses
   # * or the status was nil
   def tracker=(tracker)
-    if tracker != self.tracker 
+    if tracker != self.tracker
       if status == default_status
         self.status = nil
       elsif status && tracker && !tracker.issue_status_ids.include?(status.id)
@@ -318,10 +327,13 @@ class Issue < ActiveRecord::Base
   # Unless keep_tracker argument is set to true, this will change the tracker
   # to the first tracker of the new project if the previous tracker is not part
   # of the new project trackers.
-  # This will clear the fixed_version is it's no longer valid for the new project.
-  # This will clear the parent issue if it's no longer valid for the new project.
-  # This will set the category to the category with the same name in the new
-  # project if it exists, or clear it if it doesn't.
+  # This will:
+  # * clear the fixed_version is it's no longer valid for the new project.
+  # * clear the parent issue if it's no longer valid for the new project.
+  # * set the category to the category with the same name in the new
+  #   project if it exists, or clear it if it doesn't.
+  # * for new issue, set the fixed_version to the project default version
+  #   if it's a valid fixed_version.
   def project=(project, keep_tracker=false)
     project_was = self.project
     association(:project).writer(project)
@@ -345,6 +357,12 @@ class Issue < ActiveRecord::Base
       end
       @custom_field_values = nil
       @workflow_rule_by_attribute = nil
+    end
+    # Set fixed_version to the project default version if it's valid
+    if new_record? && fixed_version.nil? && project && project.default_version_id?
+      if project.shared_versions.open.exists?(project.default_version_id)
+        self.fixed_version_id = project.default_version_id
+      end
     end
     self.project
   end
@@ -423,8 +441,17 @@ class Issue < ActiveRecord::Base
     names -= disabled_core_fields
     names -= read_only_attribute_names(user)
     if new_record?
-     	# Make sure that project_id can always be set for new issues
+      # Make sure that project_id can always be set for new issues
       names |= %w(project_id)
+    end
+    if dates_derived?
+      names -= %w(start_date due_date)
+    end
+    if priority_derived?
+      names -= %w(priority_id)
+    end
+    if done_ratio_derived?
+      names -= %w(done_ratio)
     end
     names
   end
@@ -443,6 +470,11 @@ class Issue < ActiveRecord::Base
       if allowed_target_projects(user).where(:id => p.to_i).exists?
         self.project_id = p
       end
+
+      if project_id_changed? && attrs['category_id'].to_s == category_id_was.to_s
+        # Discard submitted category on previous project
+        attrs.delete('category_id')
+      end
     end
 
     if (t = attrs.delete('tracker_id')) && safe_attribute?('tracker_id')
@@ -454,18 +486,18 @@ class Issue < ActiveRecord::Base
       self.tracker ||= project.trackers.first
     end
 
+    statuses_allowed = new_statuses_allowed_to(user)
     if (s = attrs.delete('status_id')) && safe_attribute?('status_id')
-      if new_statuses_allowed_to(user).collect(&:id).include?(s.to_i)
+      if statuses_allowed.collect(&:id).include?(s.to_i)
         self.status_id = s
       end
+    end
+    if new_record? && !statuses_allowed.include?(status)
+      self.status = statuses_allowed.first || default_status
     end
 
     attrs = delete_unsafe_attributes(attrs, user)
     return if attrs.empty?
-
-    unless leaf?
-      attrs.reject! {|k,v| %w(priority_id done_ratio start_date due_date estimated_hours).include?(k)}
-    end
 
     if attrs['parent_issue_id'].present?
       s = attrs['parent_issue_id'].to_s
@@ -649,14 +681,27 @@ class Issue < ActiveRecord::Base
       if attribute =~ /^\d+$/
         attribute = attribute.to_i
         v = custom_field_values.detect {|v| v.custom_field_id == attribute }
-        if v && v.value.blank?
+        if v && Array(v.value).detect(&:present?).nil?
           errors.add :base, v.custom_field.name + ' ' + l('activerecord.errors.messages.blank')
         end
       else
         if respond_to?(attribute) && send(attribute).blank? && !disabled_core_fields.include?(attribute)
+          next if attribute == 'category_id' && project.try(:issue_categories).blank?
+          next if attribute == 'fixed_version_id' && assignable_versions.blank?
           errors.add attribute, :blank
         end
       end
+    end
+  end
+
+  # Overrides Redmine::Acts::Customizable::InstanceMethods#validate_custom_field_values
+  # so that custom values that are not editable are not validated (eg. a custom field that
+  # is marked as required should not trigger a validation error if the user is not allowed
+  # to edit this field).
+  def validate_custom_field_values
+    user = new_record? ? author : current_journal.try(:user)
+    if new_record? || custom_field_values_changed?
+      editable_custom_field_values(user).each(&:validate_value)
     end
   end
 
@@ -765,7 +810,7 @@ class Issue < ActiveRecord::Base
   # Users the issue can be assigned to
   def assignable_users
     users = project.assignable_users.to_a
-    users << author if author
+    users << author if author && author.active?
     users << assigned_to if assigned_to
     users.uniq.sort
   end
@@ -807,7 +852,7 @@ class Issue < ActiveRecord::Base
     else
       initial_status = nil
       if new_record?
-        initial_status = default_status
+        # nop
       elsif tracker_id_changed?
         if Tracker.where(:id => tracker_id_was, :default_status_id => status_id_was).any?
           initial_status = default_status
@@ -825,16 +870,15 @@ class Issue < ActiveRecord::Base
         (user.id == initial_assigned_to_id || user.group_ids.include?(initial_assigned_to_id))
 
       statuses = []
-      if initial_status
-        statuses += initial_status.find_new_statuses_allowed_to(
-          user.admin ? Role.all.to_a : user.roles_for_project(project),
-          tracker,
-          author == user,
-          assignee_transitions_allowed
-          )
-      end
+      statuses += IssueStatus.new_statuses_allowed(
+        initial_status,
+        user.admin ? Role.all.to_a : user.roles_for_project(project),
+        tracker,
+        author == user,
+        assignee_transitions_allowed
+      )
       statuses << initial_status unless statuses.empty?
-      statuses << default_status if include_default
+      statuses << default_status if include_default || (new_record? && statuses.empty?)
       statuses = statuses.compact.uniq.sort
       if blocked?
         statuses.reject!(&:is_closed?)
@@ -850,6 +894,11 @@ class Issue < ActiveRecord::Base
     if user_id && user_id != assigned_to_id
       @assigned_to_was ||= Principal.find_by_id(user_id)
     end
+  end
+
+  # Returns the original tracker
+  def tracker_was
+    Tracker.find_by_id(tracker_id_was)
   end
 
   # Returns the users that should be notified
@@ -893,21 +942,34 @@ class Issue < ActiveRecord::Base
     end
   end
 
+  def notify?
+    @notify != false
+  end
+
+  def notify=(arg)
+    @notify = arg
+  end
+
   # Returns the number of hours spent on this issue
   def spent_hours
     @spent_hours ||= time_entries.sum(:hours) || 0
   end
 
   # Returns the total number of hours spent on this issue and its descendants
-  #
-  # Example:
-  #   spent_hours => 0.0
-  #   spent_hours => 50.2
   def total_spent_hours
-    @total_spent_hours ||=
-      self_and_descendants.
-        joins("LEFT JOIN #{TimeEntry.table_name} ON #{TimeEntry.table_name}.issue_id = #{Issue.table_name}.id").
-        sum("#{TimeEntry.table_name}.hours").to_f || 0.0
+    @total_spent_hours ||= if leaf?
+      spent_hours
+    else
+      self_and_descendants.joins(:time_entries).sum("#{TimeEntry.table_name}.hours").to_f || 0.0
+    end
+  end
+
+  def total_estimated_hours
+    if leaf?
+      estimated_hours
+    else
+      @total_estimated_hours ||= self_and_descendants.sum(:estimated_hours)
+    end
   end
 
   def relations
@@ -927,9 +989,22 @@ class Issue < ActiveRecord::Base
   # Preloads visible spent time for a collection of issues
   def self.load_visible_spent_hours(issues, user=User.current)
     if issues.any?
-      hours_by_issue_id = TimeEntry.visible(user).group(:issue_id).sum(:hours)
+      hours_by_issue_id = TimeEntry.visible(user).where(:issue_id => issues.map(&:id)).group(:issue_id).sum(:hours)
       issues.each do |issue|
         issue.instance_variable_set "@spent_hours", (hours_by_issue_id[issue.id] || 0)
+      end
+    end
+  end
+
+  # Preloads visible total spent time for a collection of issues
+  def self.load_visible_total_spent_hours(issues, user=User.current)
+    if issues.any?
+      hours_by_issue_id = TimeEntry.visible(user).joins(:issue).
+        joins("JOIN #{Issue.table_name} parent ON parent.root_id = #{Issue.table_name}.root_id" +
+          " AND parent.lft <= #{Issue.table_name}.lft AND parent.rgt >= #{Issue.table_name}.rgt").
+        where("parent.id IN (?)", issues.map(&:id)).group("parent.id").sum(:hours)
+      issues.each do |issue|
+        issue.instance_variable_set "@total_spent_hours", (hours_by_issue_id[issue.id] || 0)
       end
     end
   end
@@ -1083,11 +1158,15 @@ class Issue < ActiveRecord::Base
   end
 
   def soonest_start(reload=false)
-    @soonest_start = nil if reload
-    @soonest_start ||= (
-        relations_to(reload).collect{|relation| relation.successor_soonest_start} +
-        [(@parent_issue || parent).try(:soonest_start)]
-      ).compact.max
+    if @soonest_start.nil? || reload
+      dates = relations_to(reload).collect{|relation| relation.successor_soonest_start}
+      p = @parent_issue || parent
+      if p && Setting.parent_issue_dates == 'derived'
+        dates << p.soonest_start
+      end
+      @soonest_start = dates.compact.max
+    end
+    @soonest_start
   end
 
   # Sets start_date on the given date or the next working day
@@ -1103,7 +1182,7 @@ class Issue < ActiveRecord::Base
   # If the issue is a parent task, this is done by rescheduling its subtasks.
   def reschedule_on!(date)
     return if date.nil?
-    if leaf?
+    if leaf? || !dates_derived?
       if start_date.nil? || start_date != date
         if start_date && start_date > date
           # Issue can not be moved earlier than its soonest start date
@@ -1131,6 +1210,18 @@ class Issue < ActiveRecord::Base
         end
       end
     end
+  end
+
+  def dates_derived?
+    !leaf? && Setting.parent_issue_dates == 'derived'
+  end
+
+  def priority_derived?
+    !leaf? && Setting.parent_issue_priority == 'derived'
+  end
+
+  def done_ratio_derived?
+    !leaf? && Setting.parent_issue_done_ratio == 'derived'
   end
 
   def <=>(issue)
@@ -1318,7 +1409,7 @@ class Issue < ActiveRecord::Base
     if current_project
       condition = ["(#{condition}) OR #{Project.table_name}.id = ?", current_project.id]
     end
-    Project.where(condition)
+    Project.where(condition).having_trackers
   end
 
   private
@@ -1419,37 +1510,39 @@ class Issue < ActiveRecord::Base
 
   def recalculate_attributes_for(issue_id)
     if issue_id && p = Issue.find_by_id(issue_id)
-      # priority = highest priority of children
-      if priority_position = p.children.joins(:priority).maximum("#{IssuePriority.table_name}.position")
-        p.priority = IssuePriority.find_by_position(priority_position)
-      end
-
-      # start/due dates = lowest/highest dates of children
-      p.start_date = p.children.minimum(:start_date)
-      p.due_date = p.children.maximum(:due_date)
-      if p.start_date && p.due_date && p.due_date < p.start_date
-        p.start_date, p.due_date = p.due_date, p.start_date
-      end
-
-      # done ratio = weighted average ratio of leaves
-      unless Issue.use_status_for_done_ratio? && p.status && p.status.default_done_ratio
-        leaves_count = p.leaves.count
-        if leaves_count > 0
-          average = p.leaves.where("estimated_hours > 0").average(:estimated_hours).to_f
-          if average == 0
-            average = 1
-          end
-          done = p.leaves.joins(:status).
-            sum("COALESCE(CASE WHEN estimated_hours > 0 THEN estimated_hours ELSE NULL END, #{average}) " +
-                "* (CASE WHEN is_closed = #{self.class.connection.quoted_true} THEN 100 ELSE COALESCE(done_ratio, 0) END)").to_f
-          progress = done / (average * leaves_count)
-          p.done_ratio = progress.round
+      if p.priority_derived?
+        # priority = highest priority of children
+        if priority_position = p.children.joins(:priority).maximum("#{IssuePriority.table_name}.position")
+          p.priority = IssuePriority.find_by_position(priority_position)
         end
       end
 
-      # estimate = sum of leaves estimates
-      p.estimated_hours = p.leaves.sum(:estimated_hours).to_f
-      p.estimated_hours = nil if p.estimated_hours == 0.0
+      if p.dates_derived?
+        # start/due dates = lowest/highest dates of children
+        p.start_date = p.children.minimum(:start_date)
+        p.due_date = p.children.maximum(:due_date)
+        if p.start_date && p.due_date && p.due_date < p.start_date
+          p.start_date, p.due_date = p.due_date, p.start_date
+        end
+      end
+
+      if p.done_ratio_derived?
+        # done ratio = weighted average ratio of leaves
+        unless Issue.use_status_for_done_ratio? && p.status && p.status.default_done_ratio
+          child_count = p.children.count
+          if child_count > 0
+            average = p.children.where("estimated_hours > 0").average(:estimated_hours).to_f
+            if average == 0
+              average = 1
+            end
+            done = p.children.joins(:status).
+              sum("COALESCE(CASE WHEN estimated_hours > 0 THEN estimated_hours ELSE NULL END, #{average}) " +
+                  "* (CASE WHEN is_closed = #{self.class.connection.quoted_true} THEN 100 ELSE COALESCE(done_ratio, 0) END)").to_f
+            progress = done / (average * child_count)
+            p.done_ratio = progress.round
+          end
+        end
+      end
 
       # ancestors will be recursively updated
       p.save(:validate => false)
@@ -1568,7 +1661,7 @@ class Issue < ActiveRecord::Base
   end
 
   def send_notification
-    if Setting.notified_events.include?('issue_added')
+    if notify? && Setting.notified_events.include?('issue_added')
       Mailer.deliver_issue_add(self)
     end
   end

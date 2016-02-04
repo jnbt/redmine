@@ -34,18 +34,26 @@ module IssuesHelper
 
   def grouped_issue_list(issues, query, issue_count_by_group, &block)
     previous_group, first = false, true
+    totals_by_group = query.totalable_columns.inject({}) do |h, column|
+      h[column] = query.total_by_group_for(column)
+      h
+    end
     issue_list(issues) do |issue, level|
       group_name = group_count = nil
-      if query.grouped? && ((group = query.group_by_column.value(issue)) != previous_group || first)
-        if group.blank? && group != false
-          group_name = "(#{l(:label_blank_value)})"
-        else
-          group_name = column_content(query.group_by_column, issue)
+      if query.grouped?
+        group = query.group_by_column.value(issue)
+        if first || group != previous_group
+          if group.blank? && group != false
+            group_name = "(#{l(:label_blank_value)})"
+          else
+            group_name = format_object(group)
+          end
+          group_name ||= ""
+          group_count = issue_count_by_group[group]
+          group_totals = totals_by_group.map {|column, t| total_tag(column, t[group] || 0)}.join(" ").html_safe
         end
-        group_name ||= ""
-        group_count = issue_count_by_group[group]
       end
-      yield issue, level, group_name, group_count
+      yield issue, level, group_name, group_count, group_totals
       previous_group, first = group, false
     end
   end
@@ -106,11 +114,35 @@ module IssuesHelper
              content_tag('td', link_to_issue(child, :project => (issue.project_id != child.project_id)), :class => 'subject', :style => 'width: 50%') +
              content_tag('td', h(child.status)) +
              content_tag('td', link_to_user(child.assigned_to)) +
-             content_tag('td', progress_bar(child.done_ratio, :width => '80px')),
+             content_tag('td', progress_bar(child.done_ratio)),
              :class => css)
     end
     s << '</table></form>'
     s.html_safe
+  end
+
+  def issue_estimated_hours_details(issue)
+    if issue.total_estimated_hours.present?
+      if issue.total_estimated_hours == issue.estimated_hours
+        l_hours_short(issue.estimated_hours)
+      else
+        s = issue.estimated_hours.present? ? l_hours_short(issue.estimated_hours) : ""
+        s << " (#{l(:label_total)}: #{l_hours_short(issue.total_estimated_hours)})"
+        s.html_safe
+      end
+    end
+  end
+
+  def issue_spent_hours_details(issue)
+    if issue.total_spent_hours > 0
+      if issue.total_spent_hours == issue.spent_hours
+        link_to(l_hours_short(issue.spent_hours), issue_time_entries_path(issue))
+      else
+        s = issue.spent_hours > 0 ? l_hours_short(issue.spent_hours) : ""
+        s << " (#{l(:label_total)}: #{link_to l_hours_short(issue.total_spent_hours), issue_time_entries_path(issue)})"
+        s.html_safe
+      end
+    end
   end
 
   # Returns an array of error messages for bulk edited issues
@@ -157,18 +189,18 @@ module IssuesHelper
     end
 
     def to_html
-      html = ''.html_safe
-      blank = content_tag('th', '') + content_tag('td', '')
-      size.times do |i|
-        left = @left[i] || blank
-        right = @right[i] || blank
-        html << content_tag('tr', left + right)
-      end
-      html
+      content =
+        content_tag('div', @left.reduce(&:+), :class => 'splitcontentleft') +
+        content_tag('div', @right.reduce(&:+), :class => 'splitcontentleft')
+
+      content_tag('div', content, :class => 'splitcontent')
     end
 
     def cells(label, text, options={})
-      content_tag('th', "#{label}:", options) + content_tag('td', text, options)
+      options[:class] = [options[:class] || "", 'attribute'].join(' ')
+      content_tag 'div',
+        content_tag('div', label + ":", :class => 'label') + content_tag('div', text, :class => 'value'),
+        options
     end
   end
 
@@ -181,22 +213,14 @@ module IssuesHelper
   def render_custom_fields_rows(issue)
     values = issue.visible_custom_field_values
     return if values.empty?
-    ordered_values = []
     half = (values.size / 2.0).ceil
-    half.times do |i|
-      ordered_values << values[i]
-      ordered_values << values[i + half]
+    issue_fields_rows do |rows|
+      values.each_with_index do |value, i|
+        css = "cf_#{value.custom_field.id}"
+        m = (i < half ? :left : :right)
+        rows.send m, custom_field_name_tag(value.custom_field), show_value(value), :class => css
+      end
     end
-    s = "<tr>\n"
-    n = 0
-    ordered_values.compact.each do |value|
-      css = "cf_#{value.custom_field.id}"
-      s << "</tr>\n<tr>\n" if n > 0 && (n % 2) == 0
-      s << "\t<th class=\"#{css}\">#{ h(value.custom_field.name) }:</th><td class=\"#{css}\">#{ h(show_value(value)) }</td>\n"
-      n += 1
-    end
-    s << "</tr>\n"
-    s.html_safe
   end
 
   # Returns the path for updating the issue form
@@ -225,7 +249,7 @@ module IssuesHelper
     issues = [issues] unless issues.is_a?(Array)
     message = l(:text_issues_destroy_confirmation)
 
-		descendant_count = issues_descendant_count(issues)
+    descendant_count = issues_descendant_count(issues)
     if descendant_count > 0
       message << "\n" + l(:text_issues_destroy_descendants_confirmation, :count => descendant_count)
     end

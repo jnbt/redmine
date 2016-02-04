@@ -384,7 +384,7 @@ class RedCloth3 < String
                 (?!\-\-)
                 (#{QTAGS_JOIN}|)      # oqs
                 (#{rcq})              # qtag
-                (\w|[^\s].*?[^\s])    # content
+                ([[:word:]]|[^\s].*?[^\s])    # content
                 (?!\-\-)
                 #{rcq}
                 (#{QTAGS_JOIN}|)      # oqa
@@ -393,7 +393,7 @@ class RedCloth3 < String
                 /(#{rcq})
                 (#{C})
                 (?::(\S+))?
-                (\w|[^\s\-].*?[^\s\-])
+                ([[:word:]]|[^\s\-].*?[^\s\-])
                 #{rcq}/xm 
             end
         [rc, ht, re, rtype]
@@ -525,7 +525,7 @@ class RedCloth3 < String
             tatts = pba( tatts, 'table' )
             tatts = shelve( tatts ) if tatts
             rows = []
-            fullrow.gsub!(/([^|])\n/, "\\1<br />")
+            fullrow.gsub!(/([^|\s])\s*\n/, "\\1<br />")
             fullrow.each_line do |row|
                 ratts, row = pba( $1, 'tr' ), $2 if row =~ /^(#{A}#{C}\. )(.*)/m
                 cells = []

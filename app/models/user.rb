@@ -47,7 +47,7 @@ class User < Principal
         :order => %w(lastname firstname id),
         :setting_order => 4
       },
-    :lastname_coma_firstname => {
+    :lastname_comma_firstname => {
         :string => '#{lastname}, #{firstname}',
         :order => %w(lastname firstname id),
         :setting_order => 5
@@ -130,7 +130,7 @@ class User < Principal
   scope :having_mail, lambda {|arg|
     addresses = Array.wrap(arg).map {|a| a.to_s.downcase}
     if addresses.any?
-      joins(:email_addresses).where("LOWER(address) IN (?)", addresses).uniq
+      joins(:email_addresses).where("LOWER(#{EmailAddress.table_name}.address) IN (?)", addresses).uniq
     else
       none
     end
@@ -157,6 +157,7 @@ class User < Principal
     @notified_projects_ids_changed = false
     @builtin_role = nil
     @visible_project_ids = nil
+    @managed_roles = nil
     base_reload(*args)
   end
 
@@ -323,8 +324,19 @@ class User < Principal
     return auth_source.allow_password_changes?
   end
 
+  # Returns true if the user password has expired
+  def password_expired?
+    period = Setting.password_max_age.to_i
+    if period.zero?
+      false
+    else
+      changed_on = self.passwd_changed_on || Time.at(0)
+      changed_on < period.days.ago
+    end
+  end
+
   def must_change_password?
-    must_change_passwd? && change_password_allowed?
+    (must_change_passwd? || password_expired?) && change_password_allowed?
   end
 
   def generate_password?
@@ -380,6 +392,26 @@ class User < Principal
       create_api_token(:action => 'api')
     end
     api_token.value
+  end
+
+  # Generates a new session token and returns its value
+  def generate_session_token
+    token = Token.create!(:user_id => id, :action => 'session')
+    token.value
+  end
+
+  # Returns true if token is a valid session token for the user whose id is user_id
+  def self.verify_session_token(user_id, token)
+    return false if user_id.blank? || token.blank?
+
+    scope = Token.where(:user_id => user_id, :value => token.to_s, :action => 'session')
+    if Setting.session_lifetime?
+      scope = scope.where("created_on > ?", Setting.session_lifetime.to_i.minutes.ago)
+    end
+    if Setting.session_timeout?
+      scope = scope.where("updated_on > ?", Setting.session_timeout.to_i.minutes.ago)
+    end
+    scope.update_all(:updated_on => Time.now) == 1
   end
 
   # Return an array of project ids for which the user has explicitly turned mail notifications on
@@ -555,6 +587,15 @@ class User < Principal
     @visible_project_ids ||= Project.visible(self).pluck(:id)
   end
 
+  # Returns the roles that the user is allowed to manage for the given project
+  def managed_roles(project)
+    if admin?
+      @managed_roles ||= Role.givable.to_a
+    else
+      membership(project).try(:managed_roles) || []
+    end
+  end
+
   # Returns true if user is arg or belongs to arg
   def is_or_belongs_to?(arg)
     if arg.is_a?(User)
@@ -623,14 +664,19 @@ class User < Principal
     allowed_to?(action, nil, options.reverse_merge(:global => true), &block)
   end
 
+  def allowed_to_view_all_time_entries?(context)
+    allowed_to?(:view_time_entries, context) do |role, user|
+      role.time_entries_visibility == 'all'
+    end
+  end
+
   # Returns true if the user is allowed to delete the user's own account
   def own_account_deletable?
     Setting.unsubscribe? &&
       (!admin? || User.active.where("admin = ? AND id <> ?", true, id).exists?)
   end
 
-  safe_attributes 'login',
-    'firstname',
+  safe_attributes 'firstname',
     'lastname',
     'mail',
     'mail_notification',
@@ -738,8 +784,8 @@ class User < Principal
   # This helps to keep the account secure in case the associated email account
   # was compromised.
   def destroy_tokens
-    if hashed_password_changed?
-      tokens = ['recovery', 'autologin']
+    if hashed_password_changed? || (status_changed? && !active?)
+      tokens = ['recovery', 'autologin', 'session']
       Token.where(:user_id => id, :action => tokens).delete_all
     end
   end

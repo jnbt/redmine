@@ -29,19 +29,16 @@ class Project < ActiveRecord::Base
 
   # Specific overridden Activities
   has_many :time_entry_activities
+  has_many :memberships, :class_name => 'Member', :inverse_of => :project
+  # Memberships of active users only
   has_many :members,
-           lambda { joins(:principal, :roles).
-                    where("#{Principal.table_name}.type='User' AND #{Principal.table_name}.status=#{Principal::STATUS_ACTIVE}") }
-  has_many :memberships, :class_name => 'Member'
-  has_many :member_principals,
-           lambda { joins(:principal).
-                    where("#{Principal.table_name}.status=#{Principal::STATUS_ACTIVE}")},
-    :class_name => 'Member'
+           lambda { joins(:principal).where(:users => {:type => 'User', :status => Principal::STATUS_ACTIVE}) }
   has_many :enabled_modules, :dependent => :delete_all
   has_and_belongs_to_many :trackers, lambda {order(:position)}
   has_many :issues, :dependent => :destroy
   has_many :issue_changes, :through => :issues, :source => :journals
   has_many :versions, lambda {order("#{Version.table_name}.effective_date DESC, #{Version.table_name}.name DESC")}, :dependent => :destroy
+  belongs_to :default_version, :class_name => 'Version'
   has_many :time_entries, :dependent => :destroy
   has_many :queries, :class_name => 'IssueQuery', :dependent => :delete_all
   has_many :documents, :dependent => :destroy
@@ -114,6 +111,9 @@ class Project < ActiveRecord::Base
     end
   }
   scope :sorted, lambda {order(:lft)}
+  scope :having_trackers, lambda {
+    where("#{Project.table_name}.id IN (SELECT DISTINCT project_id FROM #{table_name_prefix}projects_trackers#{table_name_suffix})")
+  }
 
   def initialize(attributes=nil, *args)
     super
@@ -149,7 +149,10 @@ class Project < ActiveRecord::Base
   # returns latest created projects
   # non public projects will be returned only if user is a member of those
   def self.latest(user=nil, count=5)
-    visible(user).limit(count).order("created_on DESC").to_a
+    visible(user).limit(count).
+      order(:created_on => :desc).
+      where("#{table_name}.created_on >= ?", 30.days.ago).
+      to_a
   end
 
   # Returns true if the project is visible to +user+ or to the current user.
@@ -192,7 +195,11 @@ class Project < ActiveRecord::Base
       unless options[:member]
         role = user.builtin_role
         if role.allowed_to?(permission)
-          statement_by_role[role] = "#{Project.table_name}.is_public = #{connection.quoted_true}"
+          s = "#{Project.table_name}.is_public = #{connection.quoted_true}"
+          if user.id
+            s = "(#{s} AND #{Project.table_name}.id NOT IN (SELECT project_id FROM #{Member.table_name} WHERE user_id = #{user.id}))"
+          end
+          statement_by_role[role] = s
         end
       end
       user.projects_by_role.each do |role, projects|
@@ -216,8 +223,9 @@ class Project < ActiveRecord::Base
   end
 
   def override_roles(role)
-    @override_members ||= member_principals.
-      where("#{Principal.table_name}.type IN (?)", ['GroupAnonymous', 'GroupNonMember']).to_a
+    @override_members ||= memberships.
+      joins(:principal).
+      where(:users => {:type => ['GroupAnonymous', 'GroupNonMember']}).to_a
 
     group_class = role.anonymous? ? GroupAnonymous : GroupNonMember
     member = @override_members.detect {|m| m.principal.is_a? group_class}
@@ -234,11 +242,17 @@ class Project < ActiveRecord::Base
 
   # Returns the Systemwide and project specific activities
   def activities(include_inactive=false)
-    if include_inactive
-      return all_activities
-    else
-      return active_activities
+    t = TimeEntryActivity.table_name
+    scope = TimeEntryActivity.where("#{t}.project_id IS NULL OR #{t}.project_id = ?", id)
+
+    overridden_activity_ids = self.time_entry_activities.pluck(:parent_id).compact
+    if overridden_activity_ids.any?
+      scope = scope.where("#{t}.id NOT IN (?)", overridden_activity_ids)
     end
+    unless include_inactive
+      scope = scope.active
+    end
+    scope
   end
 
   # Will create a new Project specific Activity or update an existing one
@@ -269,8 +283,8 @@ class Project < ActiveRecord::Base
           raise ActiveRecord::Rollback, "Overriding TimeEntryActivity was not successfully saved"
         else
           self.time_entries.
-            where(["activity_id = ?", parent_activity.id]).
-            update_all("activity_id = #{project_activity.id}")
+            where(:activity_id => parent_activity.id).
+            update_all(:activity_id => project_activity.id)
         end
       end
     end
@@ -322,8 +336,12 @@ class Project < ActiveRecord::Base
   end
 
   def to_param
-    # id is used for projects with a numeric identifier (compatibility)
-    @to_param ||= (identifier.to_s =~ %r{^\d*$} ? id.to_s : identifier)
+    if new_record?
+      nil
+    else
+      # id is used for projects with a numeric identifier (compatibility)
+      @to_param ||= (identifier.to_s =~ %r{^\d*$} ? id.to_s : identifier)
+    end
   end
 
   def active?
@@ -512,11 +530,17 @@ class Project < ActiveRecord::Base
   # Returns a scope of all custom fields enabled for project issues
   # (explicitly associated custom fields and custom fields enabled for all projects)
   def all_issue_custom_fields
-    @all_issue_custom_fields ||= IssueCustomField.
-      sorted.
-      where("is_for_all = ? OR id IN (SELECT DISTINCT cfp.custom_field_id" +
-        " FROM #{table_name_prefix}custom_fields_projects#{table_name_suffix} cfp" +
-        " WHERE cfp.project_id = ?)", true, id)
+    if new_record?
+      @all_issue_custom_fields ||= IssueCustomField.
+        sorted.
+        where("is_for_all = ? OR id IN (?)", true, issue_custom_field_ids)
+    else
+      @all_issue_custom_fields ||= IssueCustomField.
+        sorted.
+        where("is_for_all = ? OR id IN (SELECT DISTINCT cfp.custom_field_id" +
+          " FROM #{table_name_prefix}custom_fields_projects#{table_name_suffix} cfp" +
+          " WHERE cfp.project_id = ?)", true, id)
+    end
   end
 
   def project
@@ -524,7 +548,7 @@ class Project < ActiveRecord::Base
   end
 
   def <=>(project)
-    name.downcase <=> project.name.downcase
+    name.casecmp(project.name)
   end
 
   def to_s
@@ -667,7 +691,8 @@ class Project < ActiveRecord::Base
     'custom_fields',
     'tracker_ids',
     'issue_custom_field_ids',
-    'parent_id'
+    'parent_id',
+    'default_version_id'
 
   safe_attributes 'enabled_module_names',
     :if => lambda {|project, user| project.new_record? || user.allowed_to?(:select_project_modules, project) }
@@ -680,12 +705,14 @@ class Project < ActiveRecord::Base
     attrs = attrs.deep_dup
 
     @unallowed_parent_id = nil
-    parent_id_param = attrs['parent_id'].to_s
-    if parent_id_param.blank? || parent_id_param != parent_id.to_s
-      p = parent_id_param.present? ? Project.find_by_id(parent_id_param) : nil
-      unless allowed_parents(user).include?(p)
-        attrs.delete('parent_id')
-        @unallowed_parent_id = true
+    if new_record? || attrs.key?('parent_id')
+      parent_id_param = attrs['parent_id'].to_s
+      if new_record? || parent_id_param != parent_id.to_s
+        p = parent_id_param.present? ? Project.find_by_id(parent_id_param) : nil
+        unless allowed_parents(user).include?(p)
+          attrs.delete('parent_id')
+          @unallowed_parent_id = true
+        end
       end
     end
 
@@ -733,13 +760,18 @@ class Project < ActiveRecord::Base
     end
   end
 
+  def member_principals
+    ActiveSupport::Deprecation.warn "Project#member_principals is deprecated and will be removed in Redmine 4.0. Use #memberships.active instead."
+    memberships.active
+  end
+
   # Returns a new unsaved Project instance with attributes copied from +project+
   def self.copy_from(project)
     project = project.is_a?(Project) ? project : Project.find(project)
     # clear unique attributes
     attributes = project.attributes.dup.except('id', 'name', 'identifier', 'status', 'parent_id', 'lft', 'rgt')
     copy = Project.new(attributes)
-    copy.enabled_modules = project.enabled_modules
+    copy.enabled_module_names = project.enabled_module_names
     copy.trackers = project.trackers
     copy.custom_values = project.custom_values.collect {|v| v.clone}
     copy.issue_custom_fields = project.issue_custom_fields
@@ -880,6 +912,22 @@ class Project < ActiveRecord::Base
       if issue.fixed_version && issue.fixed_version.project == project
         new_issue.fixed_version = self.versions.detect {|v| v.name == issue.fixed_version.name}
       end
+      # Reassign version custom field values
+      new_issue.custom_field_values.each do |custom_value|
+        if custom_value.custom_field.field_format == 'version' && custom_value.value.present?
+          versions = Version.where(:id => custom_value.value).to_a
+          new_value = versions.map do |version|
+            if version.project == project
+              self.versions.detect {|v| v.name == version.name}.try(:id)
+            else
+              version.id
+            end
+          end
+          new_value.compact!
+          new_value = new_value.first unless custom_value.custom_field.multiple?
+          custom_value.value = new_value
+        end
+      end
       # Reassign the category by name, since names are unique per project
       if issue.category
         new_issue.category = self.issue_categories.detect {|c| c.name == issue.category.name}
@@ -987,42 +1035,6 @@ class Project < ActiveRecord::Base
 
   def allowed_actions
     @actions_allowed ||= allowed_permissions.inject([]) { |actions, permission| actions += Redmine::AccessControl.allowed_actions(permission) }.flatten
-  end
-
-  # Returns all the active Systemwide and project specific activities
-  def active_activities
-    overridden_activity_ids = self.time_entry_activities.collect(&:parent_id)
-
-    if overridden_activity_ids.empty?
-      return TimeEntryActivity.shared.active
-    else
-      return system_activities_and_project_overrides
-    end
-  end
-
-  # Returns all the Systemwide and project specific activities
-  # (inactive and active)
-  def all_activities
-    overridden_activity_ids = self.time_entry_activities.collect(&:parent_id)
-
-    if overridden_activity_ids.empty?
-      return TimeEntryActivity.shared
-    else
-      return system_activities_and_project_overrides(true)
-    end
-  end
-
-  # Returns the systemwide active activities merged with the project specific overrides
-  def system_activities_and_project_overrides(include_inactive=false)
-    t = TimeEntryActivity.table_name
-    scope = TimeEntryActivity.where(
-      "(#{t}.project_id IS NULL AND #{t}.id NOT IN (?)) OR (#{t}.project_id = ?)",
-      time_entry_activities.map(&:parent_id), id
-    )
-    unless include_inactive
-      scope = scope.active
-    end
-    scope
   end
 
   # Archives subprojects recursively

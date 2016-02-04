@@ -25,6 +25,9 @@ module ApplicationHelper
   include Redmine::I18n
   include GravatarHelper::PublicMethods
   include Redmine::Pagination::Helper
+  include Redmine::SudoMode::Helper
+  include Redmine::Themes::Helper
+  include Redmine::Hook::Helper
 
   extend Forwardable
   def_delegators :wiki_helper, :wikitoolbar_for, :heads_for_wiki_formatter
@@ -337,6 +340,7 @@ module ApplicationHelper
         { :value => project_path(:id => p, :jump => current_menu_item) }
       end
 
+      content_tag( :span, nil, :class => 'jump-box-arrow') +
       select_tag('project_quick_jump_box', options, :onchange => 'if (this.value != \'\') { window.location = this.value; }')
     end
   end
@@ -608,7 +612,7 @@ module ApplicationHelper
       parsed << text
       if tag
         if closing
-          if tags.last == tag.downcase
+          if tags.last && tags.last.casecmp(tag) == 0
             tags.pop
           end
         else
@@ -739,7 +743,7 @@ module ApplicationHelper
   #     identifier:source:some/file
   def parse_redmine_links(text, default_project, obj, attr, only_path, options)
     text.gsub!(%r{<a( [^>]+?)?>(.*?)</a>|([\s\(,\-\[\>]|^)(!)?(([a-z0-9\-_]+):)?(attachment|document|version|forum|news|message|project|commit|source|export)?(((#)|((([a-z0-9\-_]+)\|)?(r)))((\d+)((#note)?-(\d+))?)|(:)([^"\s<>][^\s<>]*?|"[^"]+?"))(?=(?=[[:punct:]][^A-Za-z0-9_/])|,|\s|\]|<|$)}) do |m|
-      tag_content, leading, esc, project_prefix, project_identifier, prefix, repo_prefix, repo_identifier, sep, identifier, comment_suffix, comment_id = $1, $3, $4, $5, $6, $7, $12, $13, $10 || $14 || $20, $16 || $21, $17, $19
+      tag_content, leading, esc, project_prefix, project_identifier, prefix, repo_prefix, repo_identifier, sep, identifier, comment_suffix, comment_id = $2, $3, $4, $5, $6, $7, $12, $13, $10 || $14 || $20, $16 || $21, $17, $19
       if tag_content
         $&
       else
@@ -780,7 +784,7 @@ module ApplicationHelper
                 link = link_to("##{oid}#{comment_suffix}",
                                issue_url(issue, :only_path => only_path, :anchor => anchor),
                                :class => issue.css_classes,
-                               :title => "#{issue.subject.truncate(100)} (#{issue.status.name})")
+                               :title => "#{issue.tracker.name}: #{issue.subject.truncate(100)} (#{issue.status.name})")
               end
             when 'document'
               if document = Document.visible.find_by_id(oid)
@@ -1104,20 +1108,19 @@ module ApplicationHelper
     pcts = pcts.collect(&:round)
     pcts[1] = pcts[1] - pcts[0]
     pcts << (100 - pcts[1] - pcts[0])
-    width = options[:width] || '100px;'
     legend = options[:legend] || ''
     content_tag('table',
       content_tag('tr',
         (pcts[0] > 0 ? content_tag('td', '', :style => "width: #{pcts[0]}%;", :class => 'closed') : ''.html_safe) +
         (pcts[1] > 0 ? content_tag('td', '', :style => "width: #{pcts[1]}%;", :class => 'done') : ''.html_safe) +
         (pcts[2] > 0 ? content_tag('td', '', :style => "width: #{pcts[2]}%;", :class => 'todo') : ''.html_safe)
-      ), :class => "progress progress-#{pcts[0]}", :style => "width: #{width};").html_safe +
+      ), :class => "progress progress-#{pcts[0]}").html_safe +
       content_tag('p', legend, :class => 'percent').html_safe
   end
 
   def checked_image(checked=true)
     if checked
-      image_tag 'toggle_check.png'
+      @checked_image_tag ||= image_tag('toggle_check.png')
     end
   end
 
@@ -1139,7 +1142,7 @@ module ApplicationHelper
 
   def calendar_for(field_id)
     include_calendar_headers_tags
-    javascript_tag("$(function() { $('##{field_id}').datepicker(datepickerOptions); });")
+    javascript_tag("$(function() { $('##{field_id}').addClass('date').datepicker(datepickerOptions); });")
   end
 
   def include_calendar_headers_tags
@@ -1250,13 +1253,21 @@ module ApplicationHelper
     end
   end
 
+  # Returns a link to edit user's avatar if avatars are enabled
+  def avatar_edit_link(user, options={})
+    if Setting.gravatar_enabled?
+      url = "https://gravatar.com"
+      link_to avatar(user, {:title => l(:button_edit)}.merge(options)), url, :target => '_blank'
+    end
+  end
+
   def sanitize_anchor_name(anchor)
     anchor.gsub(%r{[^\s\-\p{Word}]}, '').gsub(%r{\s+(\-+\s*)?}, '-')
   end
 
   # Returns the javascript tags that are included in the html layout head
   def javascript_heads
-    tags = javascript_include_tag('jquery-1.11.1-ui-1.11.0-ujs-3.1.1', 'application')
+    tags = javascript_include_tag('jquery-1.11.1-ui-1.11.0-ujs-3.1.4', 'application', 'responsive')
     unless User.current.pref.warn_on_leaving_unsaved == '0'
       tags << "\n".html_safe + javascript_tag("$(window).load(function(){ warnLeavingUnsaved('#{escape_javascript l(:text_warn_on_leaving_unsaved)}'); });")
     end
@@ -1305,6 +1316,11 @@ module ApplicationHelper
     else
       options
     end
+  end
+
+  def generate_csv(&block)
+    decimal_separator = l(:general_csv_decimal_separator)
+    encoding = l(:general_csv_encoding)
   end
 
   private

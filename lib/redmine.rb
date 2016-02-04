@@ -18,7 +18,7 @@
 require 'redmine/core_ext'
 
 begin
-  require 'RMagick' unless Object.const_defined?(:Magick)
+  require 'rmagick' unless Object.const_defined?(:Magick)
 rescue LoadError
   # RMagick is not available
 end
@@ -36,7 +36,6 @@ require 'redmine/activity/fetcher'
 require 'redmine/ciphering'
 require 'redmine/codeset_util'
 require 'redmine/field_format'
-require 'redmine/i18n'
 require 'redmine/menu_manager'
 require 'redmine/notifiable'
 require 'redmine/platform'
@@ -61,9 +60,9 @@ require 'redmine/views/builders'
 
 require 'redmine/themes'
 require 'redmine/hook'
+require 'redmine/hook/listener'
+require 'redmine/hook/view_listener'
 require 'redmine/plugin'
-
-require 'csv'
 
 Redmine::Scm::Base.add "Subversion"
 Redmine::Scm::Base.add "Darcs"
@@ -118,6 +117,7 @@ Redmine::AccessControl.map do |map|
     map.permission :view_issue_watchers, {}, :read => true
     map.permission :add_issue_watchers, {:watchers => [:new, :create, :append, :autocomplete_for_user]}
     map.permission :delete_issue_watchers, {:watchers => :destroy}
+    map.permission :import_issues, {:imports => [:new, :create, :settings, :mapping, :run, :show]}
   end
 
   map.project_module :time_tracking do |map|
@@ -231,7 +231,8 @@ Redmine::MenuManager.map :project_menu do |menu|
   menu.push :issues, { :controller => 'issues', :action => 'index' }, :param => :project_id, :caption => :label_issue_plural
   menu.push :new_issue, { :controller => 'issues', :action => 'new', :copy_from => nil }, :param => :project_id, :caption => :label_issue_new,
               :html => { :accesskey => Redmine::AccessKeys.key_for(:new_issue) },
-              :if => Proc.new { |p| p.trackers.any? }
+              :if => Proc.new { |p| p.trackers.any? },
+              :permission => :add_issues
   menu.push :gantt, { :controller => 'gantts', :action => 'show' }, :param => :project_id, :caption => :label_gantt
   menu.push :calendar, { :controller => 'calendars', :action => 'show' }, :param => :project_id, :caption => :label_calendar
   menu.push :news, { :controller => 'news', :action => 'index' }, :param => :project_id, :caption => :label_news_plural
@@ -268,11 +269,8 @@ Redmine::Search.map do |search|
 end
 
 Redmine::WikiFormatting.map do |format|
-  format.register :textile, Redmine::WikiFormatting::Textile::Formatter, Redmine::WikiFormatting::Textile::Helper
-  if Object.const_defined?(:Redcarpet)
-    format.register :markdown, Redmine::WikiFormatting::Markdown::Formatter, Redmine::WikiFormatting::Markdown::Helper,
-      :label => 'Markdown (experimental)'
-  end
+  format.register :textile
+  format.register :markdown if Object.const_defined?(:Redcarpet)
 end
 
 ActionView::Template.register_template_handler :rsb, Redmine::Views::ApiTemplateHandler

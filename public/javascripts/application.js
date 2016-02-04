@@ -217,6 +217,7 @@ function buildFilterRow(field, operator, values) {
     break;
   case "integer":
   case "float":
+  case "tree":
     tr.find('td.values').append(
       '<span style="display:none;"><input type="text" name="v['+field+'][]" id="values_'+fieldId+'_1" size="6" class="value" /></span>' +
       ' <span style="display:none;"><input type="text" name="v['+field+'][]" id="values_'+fieldId+'_2" size="6" class="value" /></span>'
@@ -274,6 +275,8 @@ function toggleOperator(field) {
     case "y":
     case "o":
     case "c":
+    case "*o":
+    case "!o":
       enableValues(field, []);
       break;
     case "><":
@@ -314,8 +317,8 @@ function toggleMultiSelect(el) {
 }
 
 function showTab(name, url) {
-  $('div#content .tab-content').hide();
-  $('div.tabs a').removeClass('selected');
+  $('#tab-content-' + name).parent().find('.tab-content').hide();
+  $('#tab-content-' + name).parent().find('div.tabs a').removeClass('selected');
   $('#tab-content-' + name).show();
   $('#tab-' + name).addClass('selected');
   //replaces current URL with the "href" attribute of the current link
@@ -351,11 +354,12 @@ function moveTabLeft(el) {
 
 function displayTabsButtons() {
   var lis;
-  var tabsWidth = 0;
+  var tabsWidth;
   var el;
   $('div.tabs').each(function() {
     el = $(this);
     lis = el.find('ul').children();
+    tabsWidth = 0;
     lis.each(function(){
       if ($(this).is(':visible')) {
         tabsWidth += $(this).width() + 6;
@@ -382,12 +386,16 @@ function showModal(id, width, title) {
   var el = $('#'+id).first();
   if (el.length === 0 || el.is(':visible')) {return;}
   if (!title) title = el.find('h3.title').text();
+  // moves existing modals behind the transparent background
+  $(".modal").zIndex(99);
   el.dialog({
     width: width,
     modal: true,
     resizable: false,
     dialogClass: 'modal',
     title: title
+  }).on('dialogclose', function(){
+    $(".modal").zIndex(101);
   });
   el.find("input[type=text], input[type=submit]").first().focus();
 }
@@ -467,11 +475,14 @@ function randomKey(size) {
   return key;
 }
 
-function updateIssueFrom(url) {
+function updateIssueFrom(url, el) {
   $('#all_attributes input, #all_attributes textarea, #all_attributes select').each(function(){
     $(this).data('valuebeforeupdate', $(this).val());
   });
-  $.ajax({
+  if (el) {
+    $("#form_update_triggered_by").val($(el).attr('id'));
+  }
+  return $.ajax({
     url: url,
     type: 'post',
     data: $('#issue-form').serialize()
@@ -550,7 +561,13 @@ function beforeShowDatePicker(input, inst) {
       break;
     case "issue_due_date" :
       if ($("#issue_start_date").size() > 0) {
-        default_date = $("#issue_start_date").val();
+        var start_date = $("#issue_start_date").val();
+        if (start_date != "") {
+          start_date = new Date(Date.parse(start_date));
+          if (start_date > new Date()) {
+            default_date = $("#issue_start_date").val();
+          }
+        }
       }
       break;
   }
@@ -622,7 +639,7 @@ function addFormObserversForDoubleSubmit() {
 }
 
 function defaultFocus(){
-  if ($('#content :focus').length == 0) {
+  if (($('#content :focus').length == 0) && (window.location.hash == '')) {
     $('#content input[type=text], #content textarea').first().focus();
   }
 }
@@ -645,8 +662,18 @@ $(document).ready(function(){
   toggleDisabledInit();
 });
 
+function keepAnchorOnSignIn(form){
+  var hash = decodeURIComponent(self.document.location.hash);
+  if (hash) {
+    if (hash.indexOf("#") === -1) {
+      hash = "#" + hash;
+    }
+    form.action = form.action + hash;
+  }
+  return true;
+}
+
 $(document).ready(setupAjaxIndicator);
 $(document).ready(hideOnLoad);
 $(document).ready(addFormObserversForDoubleSubmit);
 $(document).ready(defaultFocus);
-

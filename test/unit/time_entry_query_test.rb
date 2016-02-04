@@ -27,12 +27,22 @@ class TimeEntryQueryTest < ActiveSupport::TestCase
            :groups_users,
            :enabled_modules
 
+  def test_cross_project_activity_filter_should_propose_non_active_activities
+    activity = TimeEntryActivity.create!(:name => 'Disabled', :active => false)
+    assert !activity.active?
+
+    query = TimeEntryQuery.new(:name => '_')
+    assert options = query.available_filters['activity_id']
+    assert values = options[:values]
+    assert_include ["Disabled", activity.id.to_s], values
+  end
+
   def test_activity_filter_should_consider_system_and_project_activities
     TimeEntry.delete_all
     system = TimeEntryActivity.create!(:name => 'Foo')
+    TimeEntry.generate!(:activity => system, :hours => 1.0)
     override = TimeEntryActivity.create!(:name => 'Foo', :parent_id => system.id, :project_id => 1)
     other = TimeEntryActivity.create!(:name => 'Bar')
-    TimeEntry.generate!(:activity => system, :hours => 1.0)
     TimeEntry.generate!(:activity => override, :hours => 2.0)
     TimeEntry.generate!(:activity => other, :hours => 4.0)
 
