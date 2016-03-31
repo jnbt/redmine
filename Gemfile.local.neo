@@ -8,6 +8,7 @@ gem "redmine-roadmap_extended_issues"
 gem "redmine-project_overview_page"
 gem "redmine-custom_startpage"
 gem "redmine-per_user_status"
+gem "redmine-cmd_submit"
 
 # Additional plugins to be installed:
 # * easy_baseline
