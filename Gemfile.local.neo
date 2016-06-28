@@ -1,6 +1,6 @@
 gem "redmine-http_basic_authentication"
 gem "redmine-user_wiki_macro"
-gem "redmine-neopoly_style"
+gem "redmine-neopoly_style", "~> 0.3.1"
 gem "redmine-more_view_hooks", "~> 0.0.3"
 gem "redmine-personal_wiki_page"
 gem "redmine-project_custom_style"
