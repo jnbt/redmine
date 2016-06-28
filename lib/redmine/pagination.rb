@@ -1,7 +1,7 @@
 # encoding: utf-8
 #
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -65,6 +65,10 @@ module Redmine
         if item_count > 0
           (item_count - 1) / per_page + 1
         end
+      end
+
+      def multiple_pages?
+        per_page < item_count
       end
 
       def first_item
@@ -173,13 +177,18 @@ module Redmine
         page_param = paginator.page_param
 
         html = '<ul class="pages">'
-        if paginator.previous_page
+
+        if paginator.multiple_pages?
           # \xc2\xab(utf-8) = &#171;
           text = "\xc2\xab " + l(:label_previous)
-          html << content_tag('li',
-                              yield(text, {page_param => paginator.previous_page},
-                                    :accesskey => accesskey(:previous)),
-                              :class => 'previous page')
+          if paginator.previous_page
+            html << content_tag('li',
+                                yield(text, {page_param => paginator.previous_page},
+                                      :accesskey => accesskey(:previous)),
+                                :class => 'previous page')
+          else
+            html << content_tag('li', content_tag('span', text), :class => 'previous')
+          end
         end
 
         previous = nil
@@ -197,13 +206,17 @@ module Redmine
           previous = page
         end
 
-        if paginator.next_page
+        if paginator.multiple_pages?
           # \xc2\xbb(utf-8) = &#187;
           text = l(:label_next) + " \xc2\xbb"
-          html << content_tag('li',
-                              yield(text, {page_param => paginator.next_page},
-                                    :accesskey => accesskey(:next)),
-                              :class => 'next page')
+          if paginator.next_page
+            html << content_tag('li',
+                                yield(text, {page_param => paginator.next_page},
+                                      :accesskey => accesskey(:next)),
+                                :class => 'next page')
+          else
+            html << content_tag('li', content_tag('span', text), :class => 'next')
+          end
         end
         html << '</ul>'
 

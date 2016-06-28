@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -30,6 +30,11 @@ class UserPreferenceTest < ActiveSupport::TestCase
       preference = UserPreference.new
       assert_equal false, preference.hide_mail
     end
+  end
+
+  def test_no_self_notified_should_default_to_true
+    preference = UserPreference.new
+    assert_equal true, preference.no_self_notified
   end
 
   def test_create
@@ -65,11 +70,6 @@ class UserPreferenceTest < ActiveSupport::TestCase
     assert_nil up.others
     assert up.save
     assert_kind_of Hash, up.others
-  end
-
-  def test_others_should_be_blank_after_initialization
-    pref = User.new.pref
-    assert_equal({}, pref.others)
   end
 
   def test_reading_value_from_nil_others_hash

@@ -1,7 +1,7 @@
 # encoding: utf-8
 #
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -50,7 +50,7 @@ module MyHelper
   end
 
   def issueswatched_items
-    Issue.visible.on_active_project.watched_by(User.current.id).recently_updated.limit(10)
+    Issue.visible.open.on_active_project.watched_by(User.current.id).recently_updated.limit(10)
   end
 
   def news_items
@@ -65,7 +65,7 @@ module MyHelper
 
   def timelog_items
     TimeEntry.
-      where("#{TimeEntry.table_name}.user_id = ? AND #{TimeEntry.table_name}.spent_on BETWEEN ? AND ?", User.current.id, Date.today - 6, Date.today).
+      where("#{TimeEntry.table_name}.user_id = ? AND #{TimeEntry.table_name}.spent_on BETWEEN ? AND ?", User.current.id, User.current.today - 6, User.current.today).
       joins(:activity, :project).
       references(:issue => [:tracker, :status]).
       includes(:issue => [:tracker, :status]).

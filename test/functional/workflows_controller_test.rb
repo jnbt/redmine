@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -284,10 +284,13 @@ class WorkflowsControllerTest < ActionController::TestCase
   def test_get_permissions_should_set_css_class
     WorkflowPermission.delete_all
     WorkflowPermission.create!(:role_id => 1, :tracker_id => 2, :old_status_id => 1, :field_name => 'assigned_to_id', :rule => 'required')
+    cf = IssueCustomField.create!(:name => 'Foo', :field_format => 'string', :tracker_ids => [2])
+    WorkflowPermission.create!(:role_id => 1, :tracker_id => 2, :old_status_id => 1, :field_name => cf.id, :rule => 'required')
 
     get :permissions, :role_id => 1, :tracker_id => 2
     assert_response :success
     assert_select 'td.required > select[name=?]', 'permissions[1][assigned_to_id]'
+    assert_select 'td.required > select[name=?]', "permissions[1][#{cf.id}]"
   end
 
   def test_post_permissions

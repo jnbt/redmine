@@ -1,7 +1,7 @@
 # encoding: utf-8
 #
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -98,6 +98,19 @@ module ProjectsHelper
   def format_version_sharing(sharing)
     sharing = 'none' unless Version::VERSION_SHARINGS.include?(sharing)
     l("label_version_sharing_#{sharing}")
+  end
+
+  def render_boards_tree(boards, parent=nil, level=0, &block)
+    selection = boards.select {|b| b.parent == parent}
+    return '' if selection.empty?
+
+    s = ''.html_safe
+    selection.each do |board|
+      node = capture(board, level, &block)
+      node << render_boards_tree(boards, board, level+1, &block)
+      s << content_tag('div', node)
+    end
+    content_tag('div', s, :class => 'sort-level')
   end
 
   def render_api_includes(project, api)

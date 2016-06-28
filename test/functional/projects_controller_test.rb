@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -690,29 +690,5 @@ class ProjectsControllerTest < ActionController::TestCase
   def test_body_should_have_project_css_class
     get :show, :id => 1
     assert_select 'body.project-ecookbook'
-  end
-
-  def test_project_menu_should_include_new_issue_link
-    @request.session[:user_id] = 2
-    get :show, :id => 1
-    assert_select '#main-menu a.new-issue[href="/projects/ecookbook/issues/new"]', :text => 'New issue'
-  end
-
-  def test_project_menu_should_not_include_new_issue_link_for_project_without_trackers
-    Project.find(1).trackers.clear
-
-    @request.session[:user_id] = 2
-    get :show, :id => 1
-    assert_select '#main-menu a.new-issue', 0
-  end
-
-  def test_project_menu_should_not_include_new_issue_link_for_users_with_copy_issues_permission_only
-    role = Role.find(1)
-    role.remove_permission! :add_issues
-    role.add_permission! :copy_issues
-
-    @request.session[:user_id] = 2
-    get :show, :id => 1
-    assert_select '#main-menu a.new-issue', 0
   end
 end

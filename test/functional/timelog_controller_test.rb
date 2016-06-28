@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -525,6 +525,15 @@ class TimelogControllerTest < ActionController::TestCase
 
     assert_response 302
     assert_equal ["0", "0"], TimeEntry.where(:id => [1, 2]).collect {|i| i.custom_value_for(10).value}
+  end
+
+  def test_bulk_update_clear_custom_field
+    field = TimeEntryCustomField.generate!(:field_format => 'string')
+    @request.session[:user_id] = 2
+    post :bulk_update, :ids => [1, 2], :time_entry => { :custom_field_values => {field.id.to_s => '__none__'} }
+
+    assert_response 302
+    assert_equal ["", ""], TimeEntry.where(:id => [1, 2]).collect {|i| i.custom_value_for(field).value}
   end
 
   def test_post_bulk_update_should_redirect_back_using_the_back_url_parameter

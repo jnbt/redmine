@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -133,6 +133,8 @@ class ApplicationController < ActionController::Base
         end
       end
     end
+    # store current ip address in user object ephemerally
+    user.remote_ip = request.remote_ip if user
     user
   end
 
@@ -348,6 +350,22 @@ class ApplicationController < ActionController::Base
       att.compact!
     end
     @attachments = att || []
+  end
+
+  def parse_params_for_bulk_update(params)
+    attributes = (params || {}).reject {|k,v| v.blank?}
+    attributes.keys.each {|k| attributes[k] = '' if attributes[k] == 'none'}
+    if custom = attributes[:custom_field_values]
+      custom.reject! {|k,v| v.blank?}
+      custom.keys.each do |k|
+        if custom[k].is_a?(Array)
+          custom[k] << '' if custom[k].delete('__none__')
+        else
+          custom[k] = '' if custom[k] == '__none__'
+        end
+      end
+    end
+    attributes
   end
 
   # make sure that the user is a member of the project (or admin) if project is private

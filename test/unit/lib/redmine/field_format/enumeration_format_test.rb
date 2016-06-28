@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -83,5 +83,9 @@ class Redmine::EnumerationFieldFormatTest < ActionView::TestCase
         assert_select 'input[value=?]', @bar.id.to_s
       end
     end
+  end
+
+  def test_value_from_keyword_should_return_enumeration_id
+    assert_equal @foo.id, @field.value_from_keyword('foo', nil)
   end
 end

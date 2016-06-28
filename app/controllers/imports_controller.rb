@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -57,11 +57,7 @@ class ImportsController < ApplicationController
   end
 
   def mapping
-    issue = Issue.new
-    issue.project = @import.project
-    issue.tracker = @import.tracker
-    @attributes = issue.safe_attribute_names
-    @custom_fields = issue.editable_custom_field_values.map(&:custom_field)
+    @custom_fields = @import.mappable_custom_fields
 
     if request.post?
       respond_to do |format|

@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -71,12 +71,13 @@ module Redmine
       ::I18n.l(date.to_date, options)
     end
 
-    def format_time(time, include_date = true)
+    def format_time(time, include_date=true, user=nil)
       return nil unless time
+      user ||= User.current
       options = {}
       options[:format] = (Setting.time_format.blank? ? :time : Setting.time_format)
       time = time.to_time if time.is_a?(String)
-      zone = User.current.time_zone
+      zone = user.time_zone
       local = zone ? time.in_time_zone(zone) : (time.utc? ? time.localtime : time)
       (include_date ? "#{format_date(local)} " : "") + ::I18n.l(local, options)
     end
@@ -139,6 +140,7 @@ module Redmine
 
       module Implementation
         include ::I18n::Backend::Base
+        include ::I18n::Backend::Pluralization
 
         # Stores translations for the given locale in memory.
         # This uses a deep merge for the translations hash, so existing

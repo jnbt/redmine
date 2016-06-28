@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -136,6 +136,11 @@ class VersionTest < ActiveSupport::TestCase
   def test_completed_should_be_false_when_due_today
     version = Version.create!(:project_id => 1, :effective_date => Date.today, :name => 'Due today')
     assert_equal false, version.completed?
+  end
+
+  def test_completed_should_be_true_when_closed
+    version = Version.create!(:project_id => 1, :status => 'closed', :name => 'Closed')
+    assert_equal true, version.completed?
   end
 
   test "#behind_schedule? should be false if there are no issues assigned" do

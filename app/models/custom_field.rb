@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -24,7 +24,7 @@ class CustomField < ActiveRecord::Base
            :dependent => :delete_all
   has_many :custom_values, :dependent => :delete_all
   has_and_belongs_to_many :roles, :join_table => "#{table_name_prefix}custom_fields_roles#{table_name_suffix}", :foreign_key => "custom_field_id"
-  acts_as_list :scope => 'type = \'#{self.class}\''
+  acts_as_positioned
   serialize :possible_values
   store :format_store
 
@@ -260,6 +260,14 @@ class CustomField < ActiveRecord::Base
 
   def format_in?(*args)
     args.include?(field_format)
+  end
+
+  def self.human_attribute_name(attribute_key_name, *args)
+    attr_name = attribute_key_name.to_s
+    if attr_name == 'url_pattern'
+      attr_name = "url"
+    end
+    super(attr_name, *args)
   end
 
   protected

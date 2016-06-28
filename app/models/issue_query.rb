@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -244,6 +244,8 @@ class IssueQuery < Query
     end
     add_available_filter "parent_id", :type => :tree, :label => :field_parent_issue
     add_available_filter "child_id", :type => :tree, :label => :label_subtask_plural
+
+    add_available_filter "issue_id", :type => :integer, :label => :label_issue
 
     Tracker.disabled_core_fields(trackers).each {|field|
       delete_available_filter field
@@ -506,6 +508,15 @@ class IssueQuery < Query
       "#{Issue.table_name}.rgt - #{Issue.table_name}.lft = 1"
     when "*"
       "#{Issue.table_name}.rgt - #{Issue.table_name}.lft > 1"
+    end
+  end
+
+  def sql_for_issue_id_field(field, operator, value)
+    ids = value.first.to_s.scan(/\d+/).map(&:to_i).join(",")
+    if ids.present?
+      "#{Issue.table_name}.id IN (#{ids})"
+    else
+      "1=0"
     end
   end
 

@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -51,7 +51,7 @@ class Import < ActiveRecord::Base
     separator = lu(user, :general_csv_separator)
     if file_exists?
       begin
-        content = File.read(filepath, 256, "rb")
+        content = File.read(filepath, 256)
         separator = [',', ';'].sort_by {|sep| content.count(sep) }.last
       rescue Exception => e
       end

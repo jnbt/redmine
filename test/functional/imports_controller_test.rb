@@ -1,5 +1,5 @@
 # Redmine - project management software
-# Copyright (C) 2006-2015  Jean-Philippe Lang
+# Copyright (C) 2006-2016  Jean-Philippe Lang
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -184,6 +184,8 @@ class ImportsControllerTest < ActionController::TestCase
     get :show, :id => import.to_param
     assert_response :success
     assert_template 'show'
+    assert_select 'ul#saved-items'
+    assert_select 'ul#saved-items li', import.saved_items.count
     assert_select 'table#unsaved-items', 0
   end
 
@@ -197,5 +199,6 @@ class ImportsControllerTest < ActionController::TestCase
     assert_response :success
     assert_template 'show'
     assert_select 'table#unsaved-items'
+    assert_select 'table#unsaved-items tbody tr', import.unsaved_items.count
   end
 end
