@@ -9,6 +9,7 @@ gem "redmine-project_overview_page"
 gem "redmine-custom_startpage"
 gem "redmine-per_user_status"
 gem "redmine-cmd_submit"
+gem "redmine-mattermost", "~> 0.3"
 
 # Additional plugins to be installed:
 # * easy_baseline
